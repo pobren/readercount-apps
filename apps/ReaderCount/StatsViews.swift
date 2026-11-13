@@ -421,8 +421,6 @@ struct AlertsSettings: View {
         ("spike", "Traffic spikes", "chart.line.uptrend.xyaxis"),
         ("down", "Website down", "exclamationmark.icloud"),
         ("triggers", "Goals and triggers", "target"),
-        ("links", "Broken links and missing pages", "link.badge.plus"),
-        ("daily", "Daily summary", "sun.max"),
         ("monthly", "Monthly review", "calendar"),
     ]
 

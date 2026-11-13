@@ -38,7 +38,7 @@ final class Model {
     var busy = false
     /// Push alerts: what the person allowed in Settings, and which alerts this device gets.
     var pushAllowed: Bool?
-    var alerts: [String: Bool] = (Shared.defaults.dictionary(forKey: "alerts") as? [String: Bool]) ?? ["spike": true, "down": true, "triggers": true, "links": true, "daily": false, "monthly": true]
+    var alerts: [String: Bool] = (Shared.defaults.dictionary(forKey: "alerts") as? [String: Bool]) ?? ["spike": true, "down": true, "triggers": true, "monthly": true]
     private var deviceToken: String?
 
     var sites: [String] { me?.sites ?? summary?.sites.map(\.site) ?? [] }
