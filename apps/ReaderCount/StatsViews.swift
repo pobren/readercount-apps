@@ -394,7 +394,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
         case .clicks: "cursorarrow.click.2"
         case .countries: "globe.europe.africa"
         case .towns: "building.2"
-        case .devices: "iphone.and.ipad"
+        case .devices: "ipad.and.iphone"
         case .browsers: "safari"
         case .campaigns: "megaphone"
         }

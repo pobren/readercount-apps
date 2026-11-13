@@ -100,6 +100,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
+        if Demo.on {
+            // Screenshots: bring the window to the front at 1024 by 640 (16:10, fits the CI Mac's 1024 by 768 screen)
+            // and note its number, so the workflow can capture just the window.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                NSApp.activate(ignoringOtherApps: true)
+                guard let w = NSApp.windows.first(where: { $0.canBecomeMain && !$0.className.contains("StatusBar") && !$0.className.contains("MenuBarExtra") }) else { return }
+                let top = NSScreen.main?.visibleFrame.maxY ?? 743
+                w.setFrame(NSRect(x: 0, y: top - 640, width: 1024, height: 640), display: true)
+                w.makeKeyAndOrderFront(nil)
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("readercount-win.txt")
+                try? String(w.windowNumber).write(to: url, atomically: true, encoding: .utf8)
+            }
+        }
         // The menu bar count and the open window stay up to date every 30 seconds, window or not.
         Task { @MainActor in
             while true {

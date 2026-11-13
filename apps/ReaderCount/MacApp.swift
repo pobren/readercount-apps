@@ -146,11 +146,18 @@ struct AccountFooter: View {
 /// The menu bar count: Real-Time Active Visitors across every website.
 struct MenuBarLabel: View {
     let model: Model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: "chart.bar.fill")
             if model.signedIn, model.summary != nil { Text("\(model.liveCount)").monospacedDigit() }
+        }
+        .task {
+            // Screenshots: make sure the main window is open (macOS may not open it for a fresh app).
+            guard Demo.on else { return }
+            try? await Task.sleep(for: .seconds(1))
+            if !NSApp.windows.contains(where: { $0.canBecomeMain && $0.isVisible }) { openWindow(id: "main") }
         }
     }
 }

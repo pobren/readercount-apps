@@ -73,6 +73,9 @@ jobs:
             open -n "$MAC" --args -demo -tab $pane -AppleLanguages "(en-GB)" -AppleLocale en_GB
             sleep 14
             screencapture -x shots/mac-$pane.png
+            WIN=$(cat $(find /var/folders "$HOME/Library/Containers" -name "readercount-win.txt" 2>/dev/null | head -1) 2>/dev/null)
+            if [ -n "$WIN" ]; then screencapture -o -x -l "$WIN" shots/mac-$pane.png || true; fi
+            find /var/folders "$HOME/Library/Containers" -name "readercount-win.txt" -delete 2>/dev/null || true
             pkill -x ReaderCount || true
             sleep 2
           done

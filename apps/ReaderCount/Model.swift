@@ -200,6 +200,7 @@ final class Model {
     }
 
     func checkPushAllowed() async {
+        if Demo.on { pushAllowed = true; return }
         let s = await UNUserNotificationCenter.current().notificationSettings()
         pushAllowed = s.authorizationStatus == .authorized || s.authorizationStatus == .provisional
     }
