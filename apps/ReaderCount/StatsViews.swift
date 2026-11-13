@@ -96,7 +96,7 @@ struct VisitorsChart: View {
 
     private func label(_ d: Overview.Day) -> String {
         if let h = d.hour { return "\(h):00" }
-        return String(d.day.suffix(5)).replacingOccurrences(of: "-", with: "/")
+        let p = d.day.split(separator: "-"); return p.count == 3 ? "\(p[2])/\(p[1])" : d.day  // UK order: 07/11
     }
 }
 
