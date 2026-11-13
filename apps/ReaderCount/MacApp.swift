@@ -31,7 +31,7 @@ enum MacPane: String, CaseIterable, Identifiable, Hashable {
 
 struct MacRoot: View {
     @Environment(Model.self) private var model
-    @State private var pane: MacPane? = .overview
+    @State private var pane: MacPane? = Demo.tab.flatMap { MacPane(rawValue: $0 == "today" ? "overview" : $0) } ?? .overview
     @State private var exporting = false
 
     var body: some View {

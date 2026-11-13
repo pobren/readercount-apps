@@ -6,25 +6,26 @@ import SwiftUI
 
 struct PhoneRoot: View {
     @Environment(Model.self) private var model
+    @State private var tab = Demo.tab ?? "today"
 
     var body: some View {
         Group {
             if #available(iOS 18.0, *) {
-                TabView {
-                    Tab("Today", systemImage: "chart.xyaxis.line") { screen("Today") { TodayContent(columns: 2) } }
-                    Tab("Live", systemImage: "dot.radiowaves.left.and.right") { screen("Live") { LiveContent() } }
-                    Tab("Health", systemImage: "stethoscope") { screen("Site Health") { HealthContent() } }
-                    Tab("More", systemImage: "square.grid.2x2") { MoreView() }
-                    Tab("Account", systemImage: "person.crop.circle") { AccountView() }
+                TabView(selection: $tab) {
+                    Tab("Today", systemImage: "chart.xyaxis.line", value: "today") { screen("Today") { TodayContent(columns: 2) } }
+                    Tab("Live", systemImage: "dot.radiowaves.left.and.right", value: "live") { screen("Live") { LiveContent() } }
+                    Tab("Health", systemImage: "stethoscope", value: "health") { screen("Site Health") { HealthContent() } }
+                    Tab("More", systemImage: "square.grid.2x2", value: "more") { MoreView() }
+                    Tab("Account", systemImage: "person.crop.circle", value: "account") { AccountView() }
                 }
                 .tabViewStyle(.sidebarAdaptable)
             } else {
-                TabView {
-                    screen("Today") { TodayContent(columns: 2) }.tabItem { Label("Today", systemImage: "chart.xyaxis.line") }
-                    screen("Live") { LiveContent() }.tabItem { Label("Live", systemImage: "dot.radiowaves.left.and.right") }
-                    screen("Site Health") { HealthContent() }.tabItem { Label("Health", systemImage: "stethoscope") }
-                    MoreView().tabItem { Label("More", systemImage: "square.grid.2x2") }
-                    AccountView().tabItem { Label("Account", systemImage: "person.crop.circle") }
+                TabView(selection: $tab) {
+                    screen("Today") { TodayContent(columns: 2) }.tabItem { Label("Today", systemImage: "chart.xyaxis.line") }.tag("today")
+                    screen("Live") { LiveContent() }.tabItem { Label("Live", systemImage: "dot.radiowaves.left.and.right") }.tag("live")
+                    screen("Site Health") { HealthContent() }.tabItem { Label("Health", systemImage: "stethoscope") }.tag("health")
+                    MoreView().tabItem { Label("More", systemImage: "square.grid.2x2") }.tag("more")
+                    AccountView().tabItem { Label("Account", systemImage: "person.crop.circle") }.tag("account")
                 }
             }
         }

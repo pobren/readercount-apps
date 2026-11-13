@@ -41,6 +41,20 @@ final class Model {
     var alerts: [String: Bool] = (Shared.defaults.dictionary(forKey: "alerts") as? [String: Bool]) ?? ["spike": true, "down": true, "triggers": true, "monthly": true]
     private var deviceToken: String?
 
+    private init() {
+        // Demo mode (screenshots, App Review): sample stats, no sign in, nothing sent anywhere.
+        if Demo.on {
+            signedIn = true
+            me = Demo.me
+            summary = .sample
+            site = "myblog.com"
+            overview = Demo.overview
+            live = Demo.live
+            health = Demo.health
+            pushAllowed = true
+        }
+    }
+
     var sites: [String] { me?.sites ?? summary?.sites.map(\.site) ?? [] }
     var current: String { sites.contains(site) ? site : (sites.first ?? "") }
     var liveCount: Int { summary?.totalNow ?? 0 }
@@ -91,7 +105,7 @@ final class Model {
 
     /// Everything the open screen needs. Called on opening, pull to refresh and every 30 seconds.
     func refresh() async {
-        guard signedIn else { return }
+        guard signedIn, !Demo.on else { return }
         do {
             async let m = API.shared.get(Me.self, "app/v1/me")
             async let s = API.shared.get(SitesSummary.self, "app/v1/sites")
@@ -108,21 +122,37 @@ final class Model {
     }
 
     func loadOverview() async {
+        if Demo.on { overview = Demo.overview; return }
         guard !current.isEmpty else { return }
         do { overview = try await API.shared.get(Overview.self, "app/v1/overview", ["site": current, "period": period.rawValue]) } catch { handle(error) }
     }
 
     func loadLive() async {
+        if Demo.on { live = Demo.live; return }
         guard !current.isEmpty else { return }
         do { live = try await API.shared.get(Live.self, "app/v1/live", ["site": current]) } catch { handle(error) }
     }
 
     func loadHealth() async {
+        if Demo.on { health = Demo.health; return }
         guard !current.isEmpty else { return }
         do { health = try await API.shared.get(Health.self, "app/v1/health", ["site": current, "period": period.rawValue]) } catch { handle(error) }
     }
 
     func breakdown(_ by: String, clicks: Bool = false) async -> Breakdown? {
+        if Demo.on, let o = Demo.overview {
+            let rows: [(String, Int)] = switch by {
+            case "country": o.countries.map { ($0.country, $0.visitors) }
+            case "device": o.devices.map { ($0.device, $0.visitors) }
+            case "browser": o.browsers.map { ($0.browser, $0.visitors) }
+            case "campaign": o.campaigns.map { ($0.campaign, $0.visitors) }
+            case "link": o.clicks.map { ($0.link, $0.clicks) }
+            case "town": [("London", 402), ("Leeds", 188), ("Manchester", 161), ("Dublin", 140), ("Bristol", 97)]
+            default: o.sources.map { ($0.source, $0.visitors) }
+            }
+            let json = try? JSONSerialization.data(withJSONObject: ["by": by, "rows": rows.map { [by: $0.0, "visitors": $0.1] }])
+            return json.flatMap { try? JSONDecoder().decode(Breakdown.self, from: $0) }
+        }
         guard !current.isEmpty else { return nil }
         var q = ["site": current, "by": by, "period": period.rawValue, "limit": "50"]
         if clicks { q["of"] = "clicks" }
@@ -130,6 +160,11 @@ final class Model {
     }
 
     func searches(by: String = "query") async -> (Searches?, String?) {
+        if Demo.on {
+            let rows: [[String: Any]] = [["query": "best email hosting uk", "clicks": 61, "impressions": 4120, "position": 6.2], ["query": "proton mail review", "clicks": 48, "impressions": 1980, "position": 4.1], ["query": "how to set up dmarc", "clicks": 37, "impressions": 2210, "position": 7.8], ["query": "fastmail vs gmail", "clicks": 12, "impressions": 1460, "position": 11.3]]
+            let json = try? JSONSerialization.data(withJSONObject: ["rows": rows])
+            return (json.flatMap { try? JSONDecoder().decode(Searches.self, from: $0) }, nil)
+        }
         guard !current.isEmpty else { return (nil, nil) }
         do { return (try await API.shared.get(Searches.self, "app/v1/google-searches", ["site": current, "by": by, "period": period.rawValue]), nil) } catch { return (nil, error.localizedDescription) }
     }
@@ -142,6 +177,7 @@ final class Model {
     }
 
     func markFixed(_ item: Health.Item, undo: Bool = false) async {
+        if Demo.on { return }
         guard let key = item.key else { return }
         do {
             try await API.shared.send("app/v1/health/fixed", ["site": current, "key": key, "title": item.title, "undo": undo])
@@ -152,6 +188,7 @@ final class Model {
     // MARK: Push alerts
 
     func askForPush() async {
+        if Demo.on { return }
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         pushAllowed = granted
         guard granted else { return }
