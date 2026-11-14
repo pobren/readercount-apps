@@ -3,6 +3,7 @@
 
 import SwiftUI
 import Charts
+import UniformTypeIdentifiers
 #if os(iOS)
 import UIKit
 #else
@@ -146,7 +147,11 @@ struct RankList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: icon).font(.rcHeadline)
+            HStack {
+                Label(title, systemImage: icon).font(.rcHeadline)
+                Spacer()
+                if !rows.isEmpty { ExportButton(title: title, rows: rows) }
+            }
             if rows.isEmpty {
                 Text("Nothing yet for these dates.").font(.rcCallout).foregroundStyle(.secondary)
             }
@@ -355,6 +360,56 @@ struct HealthContent: View {
             }
         }
         .task(id: model.current) { await model.loadHealth() }
+    }
+}
+
+/// A report's rows as a CSV file, named after the report, the website and the dates.
+struct CSVExport: Transferable {
+    let name: String
+    let text: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .commaSeparatedText) { file in
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(file.name)
+            try Data(file.text.utf8).write(to: url, options: .atomic)
+            return SentTransferredFile(url)
+        }
+    }
+}
+
+/// Export on every report: Save as a CSV file on the Mac, or share it (Save to Files, Mail, Numbers) on iPhone and iPad.
+struct ExportButton: View {
+    @Environment(Model.self) private var model
+    let title: String
+    let rows: [RankList.Row]
+    @State private var saving = false
+
+    private var file: CSVExport {
+        func cell(_ s: String) -> String {
+            // Drop flag emoji and quote each value so commas in page names are safe.
+            let plain = String(String.UnicodeScalarView(s.unicodeScalars.filter { !(0x1F1E6...0x1F1FF).contains($0.value) }))
+                .trimmingCharacters(in: .whitespaces)
+            return "\"" + plain.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        let detail = rows.contains { $0.detail != nil }
+        var lines = [detail ? "Name,Count,Detail" : "Name,Count"]
+        for r in rows.sorted(by: { $0.value > $1.value }) {
+            lines.append([cell(r.name), String(r.value)] .joined(separator: ",") + (detail ? "," + cell(r.detail ?? "") : ""))
+        }
+        let site = model.site.isEmpty ? "ReaderCount" : model.site
+        let name = "\(title) \(site) \(model.period.label).csv".replacingOccurrences(of: "/", with: "-")
+        return CSVExport(name: name, text: lines.joined(separator: "\n") + "\n")
+    }
+
+    var body: some View {
+        #if os(macOS)
+        Button { saving = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
+            .buttonStyle(.bordered)
+            .fileExporter(isPresented: $saving, item: file, contentTypes: [.commaSeparatedText], defaultFilename: file.name) { _ in }
+        #else
+        ShareLink(item: file, preview: SharePreview(file.name)) { Label("Export", systemImage: "square.and.arrow.up") }
+            .buttonStyle(.bordered).font(.rcCallout)
+        #endif
     }
 }
 
