@@ -85,7 +85,7 @@ struct ReaderMap: View {
             }
         }
         .card()
-        .task(id: model.current + model.period.rawValue) {
+        .task(id: model.current + model.datesKey) {
             places = await model.places()
             version += 1
             if await PlaceFinder.shared.find(Array(places.prefix(40))) { version += 1 }

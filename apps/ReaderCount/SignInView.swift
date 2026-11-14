@@ -83,6 +83,16 @@ struct SignInView: View {
 
             Text("We'll email you a six-digit code. No password needed.")
                 .font(.rcCallout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+
+            HStack { VStack { Divider() }; Text("or").font(.rcCaption).foregroundStyle(.secondary); VStack { Divider() } }
+
+            Button {
+                Task { await model.signInWithPasskey() }
+            } label: {
+                Label("Sign in with a passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).controlSize(.large)
+            .disabled(model.busy)
         }
     }
 
@@ -117,6 +127,15 @@ struct SignInView: View {
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(model.busy || code.filter(\.isNumber).count != 6)
+
+            // Apple Mail fills the code in by itself (above the keyboard, or in the field on the Mac). From Gmail or
+            // anywhere else, copy the code and paste it here.
+            PasteButton(payloadType: String.self) { strings in
+                let digits = (strings.first ?? "").components(separatedBy: CharacterSet.decimalDigits.inverted).first { $0.count == 6 } ?? ""
+                Task { @MainActor in if !digits.isEmpty { code = digits } }
+            }
+            .buttonBorderShape(.capsule)
+            .labelStyle(.titleAndIcon)
 
             HStack(spacing: 20) {
                 Button {

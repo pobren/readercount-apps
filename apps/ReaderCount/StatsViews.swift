@@ -42,12 +42,18 @@ struct SitePicker: View {
     var body: some View {
         if model.sites.count > 1 {
             Picker("Website", selection: Binding(get: { model.current }, set: { model.site = $0 })) {
-                ForEach(model.sites, id: \.self) { Text($0).tag($0) }
+                ForEach(model.sites, id: \.self) { site in
+                    Label { Text(site) } icon: { favicon(site) }.tag(site)
+                }
             }
             .pickerStyle(.menu)
         } else if let s = model.sites.first {
-            Label(s, systemImage: "globe").font(.rcHeadline)
+            Label { Text(s) } icon: { favicon(s) }.font(.rcHeadline)
         }
+    }
+
+    private func favicon(_ site: String) -> Image {
+        model.favicons[site] ?? Image(systemName: "globe")
     }
 }
 
@@ -56,10 +62,22 @@ struct PeriodPicker: View {
 
     var body: some View {
         @Bindable var model = model
-        Picker("Dates", selection: $model.period) {
-            ForEach(Period.allCases) { Text($0.label).tag($0) }
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Dates", selection: $model.period) {
+                ForEach(Period.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            if model.period == .custom {
+                HStack(spacing: 12) {
+                    Image(systemName: "calendar").foregroundStyle(.secondary)
+                    DatePicker("From", selection: $model.customFrom, in: ...model.customTo, displayedComponents: .date)
+                    DatePicker("To", selection: $model.customTo, in: model.customFrom...Date.now, displayedComponents: .date)
+                    Spacer(minLength: 0)
+                }
+                .datePickerStyle(.compact)
+                .font(.rcCallout)
+            }
         }
-        .pickerStyle(.segmented)
     }
 }
 
@@ -530,7 +548,7 @@ struct DrillView: View {
             .frame(maxWidth: .infinity)
         }
         .navigationTitle(title)
-        .task(id: model.current + model.period.rawValue) {
+        .task(id: model.current + model.datesKey) {
             days = await model.breakdown("day", filters: filters)
             for r in Self.reports where filters[r.by] == nil {
                 if let data = await model.breakdown(r.by, filters: filters) { lists[r.by] = data }
@@ -612,7 +630,7 @@ struct TodayContent: View {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }
         }
-        .task(id: model.current + model.period.rawValue) { if model.overview == nil { await model.loadOverview() } }
+        .task(id: model.current + model.datesKey) { if model.overview == nil { await model.loadOverview() } }
     }
 }
 
@@ -631,7 +649,16 @@ struct LiveContent: View {
                 RankList(title: "Pages being read now", icon: "doc.text.magnifyingglass", rows: l.pages.map { .init(name: $0.path, value: $0.n) })
                 RankList(title: "Where they came from", icon: "arrow.down.right.circle", rows: l.sources.map { .init(name: $0.name, value: $0.n) })
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("Visitor trails", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.rcHeadline)
+                    HStack {
+                        Label("On the site now", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.rcHeadline)
+                        Spacer()
+                        NavigationLink {
+                            ScrollView { TrailsContent().padding().frame(maxWidth: 1040).frame(maxWidth: .infinity) }.navigationTitle("Visitor trails")
+                        } label: {
+                            Label("All of today's trails", systemImage: "list.bullet.below.rectangle")
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     ForEach(Array(l.visitors.enumerated()), id: \.offset) { item in VisitorRow(v: item.element) }
                     if l.visitors.isEmpty { Text("Nobody on the site right now.").foregroundStyle(.secondary) }
                 }
@@ -647,6 +674,123 @@ struct LiveContent: View {
                 try? await Task.sleep(for: .seconds(5))
             }
         }
+    }
+}
+
+/// Visitor trails: every visitor on one day, newest first, with each page they read and link they clicked.
+struct TrailsContent: View {
+    @Environment(Model.self) private var model
+    @State private var day = Date.now
+    @State private var trails: Trails?
+    @State private var visitors: [LiveVisitor] = []
+    @State private var page = 1
+    @State private var loading = false
+
+    private static let iso: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_GB_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ErrorBanner()
+            HStack(spacing: 10) {
+                Button { shift(-1) } label: { Label("Day before", systemImage: "chevron.left") }
+                    .labelStyle(.iconOnly).buttonStyle(.bordered)
+                DatePicker("Day", selection: $day, in: ...Date.now, displayedComponents: .date)
+                    .labelsHidden().datePickerStyle(.compact)
+                Button { shift(1) } label: { Label("Day after", systemImage: "chevron.right") }
+                    .labelStyle(.iconOnly).buttonStyle(.bordered)
+                    .disabled(Calendar.current.isDateInToday(day))
+                Spacer()
+                if let t = trails { Text("\(t.total.formatted()) visitor\(t.total == 1 ? "" : "s")").font(.rcHeadline).foregroundStyle(.secondary) }
+            }
+            if trails == nil {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+            } else if visitors.isEmpty {
+                ContentUnavailableView("No visitors on this day", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+            } else {
+                ForEach(Array(visitors.enumerated()), id: \.offset) { item in TrailCard(v: item.element) }
+                if let t = trails, visitors.count < t.total {
+                    Button {
+                        Task { await more() }
+                    } label: {
+                        if loading { ProgressView().frame(maxWidth: .infinity) } else { Label("Show more visitors", systemImage: "arrow.down.circle").frame(maxWidth: .infinity) }
+                    }
+                    .buttonStyle(.bordered).controlSize(.large).disabled(loading)
+                }
+            }
+        }
+        .task(id: model.current + Self.iso.string(from: day)) {
+            trails = nil
+            visitors = []
+            page = 1
+            trails = await model.trails(day: Self.iso.string(from: day))
+            visitors = trails?.visitors ?? []
+        }
+    }
+
+    private func shift(_ by: Int) {
+        if let d = Calendar.current.date(byAdding: .day, value: by, to: day), d <= .now { day = d }
+    }
+
+    private func more() async {
+        loading = true
+        defer { loading = false }
+        if let next = await model.trails(day: Self.iso.string(from: day), page: page + 1) {
+            page += 1
+            visitors += next.visitors
+        }
+    }
+}
+
+/// One visitor's trail: where they're from, how they arrived, and every step with its time.
+struct TrailCard: View {
+    let v: LiveVisitor
+
+    private func time(_ ms: Double) -> String { Date(timeIntervalSince1970: ms / 1000).formatted(date: .omitted, time: .shortened) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Text(Num.flag(v.country)).font(.rcTitle3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text([v.town, v.region].filter { !$0.isEmpty }.joined(separator: ", ").ifEmpty(v.country.ifEmpty("Somewhere"))).bold()
+                    HStack(spacing: 6) {
+                        SourceIcon(name: v.source.ifEmpty("Direct")).scaleEffect(0.8)
+                        Text("\(v.source.ifEmpty("Direct")) · \(v.device.capitalized) · \(v.browser) on \(v.os)").font(.rcCaption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(time(v.first)) to \(time(v.last))").font(.rcCaption.bold()).monospacedDigit()
+                    Text("\(v.views) page\(v.views == 1 ? "" : "s")").font(.rcCaption).foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(v.steps.enumerated()), id: \.offset) { item in
+                    let s = item.element
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(spacing: 0) {
+                            Circle().fill(s.kind == "view" ? Color.accentColor : Color.orange).frame(width: 9, height: 9).padding(.top, 5)
+                            if item.offset < v.steps.count - 1 { Rectangle().fill(.quaternary).frame(width: 2).frame(maxHeight: .infinity) }
+                        }
+                        .frame(width: 10)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Label(s.kind == "view" ? s.path : (s.target ?? s.path), systemImage: s.kind == "view" ? "doc.text" : (s.kind == "goal" ? "target" : "arrow.up.right.square"))
+                                .font(.rcCallout).lineLimit(1).truncationMode(.middle)
+                            Text(time(s.ts) + (s.seconds > 0 ? " · read for \(Num.time(Int(s.seconds)))" : ""))
+                                .font(.rcCaption).foregroundStyle(.secondary)
+                        }
+                        .padding(.bottom, 8)
+                    }
+                }
+            }
+        }
+        .card()
     }
 }
 
@@ -846,7 +990,7 @@ struct BreakdownContent: View {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }
         }
-        .task(id: model.current + model.period.rawValue + by) { data = await model.breakdown(by, clicks: clicks) }
+        .task(id: model.current + model.datesKey + by) { data = await model.breakdown(by, clicks: clicks) }
     }
 }
 
@@ -868,7 +1012,7 @@ struct SearchesContent: View {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }
         }
-        .task(id: model.current + model.period.rawValue) {
+        .task(id: model.current + model.datesKey) {
             let r = await model.searches()
             data = r.0
             problem = r.1
@@ -878,10 +1022,11 @@ struct SearchesContent: View {
 
 /// The More list: each breakdown the website has, opened on its own screen.
 enum MoreItem: String, CaseIterable, Identifiable {
-    case google, sources, clicks, countries, towns, devices, browsers, campaigns
+    case trails, google, sources, clicks, countries, towns, devices, browsers, campaigns
     var id: String { rawValue }
     var title: String {
         switch self {
+        case .trails: "Visitor trails"
         case .google: "Google search"
         case .sources: "Sources"
         case .clicks: "Clicks"
@@ -894,6 +1039,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
+        case .trails: "point.topleft.down.to.point.bottomright.curvepath"
         case .google: "magnifyingglass"
         case .sources: "arrow.down.right.circle"
         case .clicks: "cursorarrow.click.2"
@@ -907,6 +1053,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
 
     @ViewBuilder var content: some View {
         switch self {
+        case .trails: TrailsContent()
         case .google: SearchesContent()
         case .sources: BreakdownContent(title: title, icon: icon, by: "source")
         case .clicks: BreakdownContent(title: title, icon: icon, by: "link", clicks: true)

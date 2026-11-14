@@ -7,7 +7,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum MacPane: String, CaseIterable, Identifiable, Hashable {
-    case overview, live, health, google, sources, clicks, countries, towns, devices, browsers, campaigns, account
+    case overview, live, health, trails, google, sources, clicks, countries, towns, devices, browsers, campaigns, account
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -38,7 +38,7 @@ struct MacRoot: View {
         NavigationSplitView {
             List(selection: $pane) {
                 Section("Stats") {
-                    ForEach([MacPane.overview, .live, .health]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                    ForEach([MacPane.overview, .live, .trails, .health]) { p in Label(p.title, systemImage: p.icon).tag(p) }
                 }
                 Section("More") {
                     ForEach([MacPane.google, .sources, .clicks, .countries, .towns, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }

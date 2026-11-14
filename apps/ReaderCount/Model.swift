@@ -1,11 +1,16 @@
 // The app's state: who is signed in, the websites, the chosen website and dates, and what each screen shows.
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 import UserNotifications
 import WidgetKit
 
 enum Period: String, CaseIterable, Identifiable {
-    case today, week = "7d", month = "30d", year = "12m"
+    case today, week = "7d", month = "30d", year = "12m", custom
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -13,6 +18,7 @@ enum Period: String, CaseIterable, Identifiable {
         case .week: "7 days"
         case .month: "30 days"
         case .year: "12 months"
+        case .custom: "Custom"
         }
     }
 }
@@ -30,6 +36,26 @@ final class Model {
     var period: Period = Period(rawValue: Shared.defaults.string(forKey: "period") ?? "") ?? .week {
         didSet { Shared.defaults.set(period.rawValue, forKey: "period"); overview = nil }
     }
+    /// Custom dates, kept on this device.
+    var customFrom: Date = (Shared.defaults.object(forKey: "customFrom") as? Date) ?? Calendar.current.date(byAdding: .day, value: -13, to: .now)! {
+        didSet { Shared.defaults.set(customFrom, forKey: "customFrom"); if period == .custom { overview = nil } }
+    }
+    var customTo: Date = (Shared.defaults.object(forKey: "customTo") as? Date) ?? .now {
+        didSet { Shared.defaults.set(customTo, forKey: "customTo"); if period == .custom { overview = nil } }
+    }
+    /// The dates to ask the server for: a period, or from and to.
+    var dates: [String: String] {
+        guard period == .custom else { return ["period": period.rawValue] }
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_GB_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return ["period": "30d", "from": f.string(from: min(customFrom, customTo)), "to": f.string(from: max(customFrom, customTo))]
+    }
+    /// Changes whenever the dates do, so screens reload.
+    var datesKey: String { dates.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&") }
+    /// Each website's favicon, for the website picker.
+    var favicons: [String: Image] = [:]
     var overview: Overview?
     var live: Live?
     var health: Health?
@@ -89,6 +115,42 @@ final class Model {
         }
     }
 
+    /// Or a passkey, as on the website.
+    func signInWithPasskey() async {
+        busy = true
+        defer { busy = false }
+        do {
+            let c = try await API.shared.passkeyChallenge()
+            let signed = try await PasskeySignIn().sign(challenge: c.challenge)
+            try await API.shared.passkeySignIn(challengeId: c.id, response: signed)
+            signedIn = true
+            error = nil
+            await refresh()
+            await askForPush()
+        } catch is CancellationError {
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Fetches each website's favicon once (through ReaderCount's own logo address).
+    func loadFavicons() async {
+        for site in sites where favicons[site] == nil {
+            guard let url = URL(string: "https://app.readercount.com/logo/\(site)"),
+                  let (data, response) = try? await URLSession.shared.data(from: url),
+                  (response as? HTTPURLResponse)?.statusCode == 200 else { continue }
+            #if os(macOS)
+            if let img = NSImage(data: data) { img.size = NSSize(width: 16, height: 16); favicons[site] = Image(nsImage: img) }
+            #else
+            if let img = UIImage(data: data) {
+                let small = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).image { _ in img.draw(in: CGRect(x: 0, y: 0, width: 20, height: 20)) }
+                favicons[site] = Image(uiImage: small.withRenderingMode(.alwaysOriginal))
+            }
+            #endif
+        }
+    }
+
     func signOut() async {
         if let t = deviceToken { try? await API.shared.send("app/v1/devices", method: "DELETE", ["token": t]) }
         Tokens.clear()
@@ -124,6 +186,7 @@ final class Model {
             sum.save()
             WidgetCenter.shared.reloadAllTimelines()
             error = nil
+            Task { await loadFavicons() }
             if !current.isEmpty { await loadOverview() }
         } catch {
             handle(error)
@@ -133,7 +196,7 @@ final class Model {
     func loadOverview() async {
         if Demo.on { overview = Demo.overview; return }
         guard !current.isEmpty else { return }
-        do { overview = try await API.shared.get(Overview.self, "app/v1/overview", ["site": current, "period": period.rawValue]) } catch { handle(error) }
+        do { overview = try await API.shared.get(Overview.self, "app/v1/overview", ["site": current].merging(dates) { _, new in new }) } catch { handle(error) }
     }
 
     /// Towns with their region and country, for the map.
@@ -144,7 +207,7 @@ final class Model {
                     Place(town: "New York City", region: "New York", country: "US", visitors: 120), Place(town: "Berlin", region: "Berlin", country: "DE", visitors: 64)]
         }
         guard !current.isEmpty else { return [] }
-        return (try? await API.shared.get(Places.self, "app/v1/places", ["site": current, "period": period.rawValue]))?.places ?? []
+        return (try? await API.shared.get(Places.self, "app/v1/places", ["site": current].merging(dates) { _, new in new }))?.places ?? []
     }
 
     func loadLive() async {
@@ -156,7 +219,7 @@ final class Model {
     func loadHealth() async {
         if Demo.on { health = Demo.health; return }
         guard !current.isEmpty else { return }
-        do { health = try await API.shared.get(Health.self, "app/v1/health", ["site": current, "period": period.rawValue]) } catch { handle(error) }
+        do { health = try await API.shared.get(Health.self, "app/v1/health", ["site": current].merging(dates) { _, new in new }) } catch { handle(error) }
     }
 
     func breakdown(_ by: String, clicks: Bool = false, filters: [String: String] = [:]) async -> Breakdown? {
@@ -176,7 +239,7 @@ final class Model {
             return json.flatMap { try? JSONDecoder().decode(Breakdown.self, from: $0) }
         }
         guard !current.isEmpty else { return nil }
-        var q = ["site": current, "by": by, "period": period.rawValue, "limit": "50"]
+        var q = ["site": current, "by": by, "limit": "50"].merging(dates) { _, new in new }
         if clicks { q["of"] = "clicks" }
         q.merge(filters) { _, new in new }
         do { return try await API.shared.get(Breakdown.self, "app/v1/breakdown", q) } catch { handle(error); return nil }
@@ -189,12 +252,13 @@ final class Model {
             return (json.flatMap { try? JSONDecoder().decode(Searches.self, from: $0) }, nil)
         }
         guard !current.isEmpty else { return (nil, nil) }
-        do { return (try await API.shared.get(Searches.self, "app/v1/google-searches", ["site": current, "by": by, "period": period.rawValue]), nil) } catch { return (nil, error.localizedDescription) }
+        do { return (try await API.shared.get(Searches.self, "app/v1/google-searches", ["site": current, "by": by].merging(dates) { _, new in new }), nil) } catch { return (nil, error.localizedDescription) }
     }
 
-    func trails(day: String? = nil) async -> Trails? {
+    func trails(day: String? = nil, page: Int = 1) async -> Trails? {
+        if Demo.on, let l = Demo.live { return Trails(site: current, day: day ?? "", page: 1, total: l.visitors.count, visitors: l.visitors) }
         guard !current.isEmpty else { return nil }
-        var q = ["site": current]
+        var q = ["site": current, "page": String(page)]
         if let day { q["day"] = day }
         do { return try await API.shared.get(Trails.self, "app/v1/trails", q) } catch { handle(error); return nil }
     }

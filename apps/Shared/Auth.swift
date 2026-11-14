@@ -116,7 +116,26 @@ actor API {
         Tokens(access: access, refresh: refresh, expires: Date().addingTimeInterval(seconds - 60)).save()
     }
 
-    private func signInPost(_ path: String, _ body: [String: String]) async throws -> [String: Any] {
+    /// Passkey, step one: a challenge for the device to sign (the same passkeys as app.readercount.com).
+    func passkeyChallenge() async throws -> (challenge: String, id: String) {
+        let j = try await signInPost("app/v1/signin/passkey/start", [:])
+        guard let o = j["options"] as? [String: Any], let c = o["challenge"] as? String, let id = j["challengeId"] as? String else {
+            throw APIError(message: "Passkeys aren't working just now. Please sign in with an emailed code.", status: 0)
+        }
+        return (c, id)
+    }
+
+    /// Passkey, step two: the signed challenge, swapped for the app's tokens.
+    func passkeySignIn(challengeId: String, response: [String: Any]) async throws {
+        let j = try await signInPost("app/v1/signin/passkey/finish", ["challengeId": challengeId, "response": response])
+        guard let access = j["access_token"] as? String, let refresh = j["refresh_token"] as? String else {
+            throw APIError(message: "Sign in didn't finish. Please try again.", status: 0)
+        }
+        let seconds = (j["expires_in"] as? Double) ?? 3600
+        Tokens(access: access, refresh: refresh, expires: Date().addingTimeInterval(seconds - 60)).save()
+    }
+
+    private func signInPost(_ path: String, _ body: [String: Any]) async throws -> [String: Any] {
         var r = URLRequest(url: Shared.app.appending(path: path))
         r.httpMethod = "POST"
         r.setValue("application/json", forHTTPHeaderField: "content-type")
