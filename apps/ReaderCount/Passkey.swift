@@ -69,7 +69,4 @@ extension Data {
         self.init(base64Encoded: b)
     }
 
-    var base64URL: String {
-        base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
-    }
 }
