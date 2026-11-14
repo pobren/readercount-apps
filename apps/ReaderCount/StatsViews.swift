@@ -3,6 +3,11 @@
 
 import SwiftUI
 import Charts
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 struct SitePicker: View {
     @Environment(Model.self) private var model
@@ -270,13 +275,16 @@ struct HealthContent: View {
                         ForEach(item.links, id: \.self) { l in
                             if let u = URL(string: l) { Link(destination: u) { Label(l, systemImage: "link").font(.caption).lineLimit(1) } }
                         }
-                        if item.key != nil {
-                            Button {
-                                Task { await model.markFixed(item) }
-                            } label: {
-                                Label("Mark as fixed", systemImage: "checkmark.circle")
+                        HStack(spacing: 10) {
+                            if item.key != nil {
+                                Button {
+                                    Task { await model.markFixed(item) }
+                                } label: {
+                                    Label("Mark as fixed", systemImage: "checkmark.circle")
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
+                            CopyIssueButton(text: ([item.title, item.detail] + item.links).joined(separator: "\n"))
                         }
                     }
                     .padding(14)
@@ -320,6 +328,32 @@ struct HealthContent: View {
             }
         }
         .task(id: model.current) { await model.loadHealth() }
+    }
+}
+
+/// Copies a live issue (title, detail and links) so it can be pasted into an email, a note or a chat.
+struct CopyIssueButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            #if os(iOS)
+            UIPasteboard.general.string = text
+            #else
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            #endif
+            copied = true
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                copied = false
+            }
+        } label: {
+            Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+        }
+        .buttonStyle(.bordered)
+        .accessibilityHint("Copies this issue")
     }
 }
 
