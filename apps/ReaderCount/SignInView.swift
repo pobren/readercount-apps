@@ -18,9 +18,9 @@ struct SignInView: View {
                 VStack(spacing: 12) {
                     Image("LogoMark").resizable().frame(width: 96, height: 96)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)).accessibilityHidden(true)
-                    Text("ReaderCount").font(.largeTitle.bold())
+                    Text("ReaderCount").font(.rcLargeTitle.bold())
                     Text("Your website's readers, live, wherever you are.")
-                        .font(.title3).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .font(.rcTitle3).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
                 .padding(.top, 40)
 
@@ -31,20 +31,20 @@ struct SignInView: View {
                 }
 
                 if let error = model.error {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout.bold())
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.rcCallout.bold())
                         .multilineTextAlignment(.center)
                 }
 
                 Divider()
 
                 VStack(spacing: 8) {
-                    Text("New to ReaderCount?").font(.headline)
+                    Text("New to ReaderCount?").font(.rcHeadline)
                     Text("Make your account and add your website at readercount.com, then sign in here.")
-                        .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        .font(.rcCallout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Link(destination: Shared.website) {
                         Label("Go to readercount.com", systemImage: "safari")
                     }
-                    .font(.callout.bold())
+                    .font(.rcCallout.bold())
                 }
             }
             .padding(24)
@@ -82,21 +82,21 @@ struct SignInView: View {
             .disabled(model.busy || !email.contains("@"))
 
             Text("We'll email you a six-digit code. No password needed.")
-                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .font(.rcCallout).foregroundStyle(.secondary).multilineTextAlignment(.center)
         }
     }
 
     private var codeStep: some View {
         VStack(spacing: 14) {
             Text("We've emailed a six-digit code to \(email). Type it here.")
-                .font(.callout).multilineTextAlignment(.center)
+                .font(.rcCallout).multilineTextAlignment(.center)
 
             TextField("Six-digit code", text: $code)
                 .textContentType(.oneTimeCode)
                 #if os(iOS)
                 .keyboardType(.numberPad)
                 #endif
-                .font(.title2.monospacedDigit())
+                .font(.rcTitle2.monospacedDigit())
                 .multilineTextAlignment(.center)
                 .focused($focus, equals: .code)
                 .onSubmit { Task { await finish() } }
@@ -134,7 +134,7 @@ struct SignInView: View {
                     Label("Use another email", systemImage: "pencil")
                 }
             }
-            .font(.callout)
+            .font(.rcCallout)
             .buttonStyle(.borderless)
             .disabled(model.busy)
         }

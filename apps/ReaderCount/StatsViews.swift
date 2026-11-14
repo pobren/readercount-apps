@@ -9,6 +9,32 @@ import UIKit
 import AppKit
 #endif
 
+/// Text sizes. On iPhone and iPad these are the usual sizes, which follow the reader's text size setting.
+/// On the Mac the standard sizes are small for reading stats, so the Mac app uses larger ones.
+extension Font {
+    #if os(macOS)
+    static let rcBody = Font.system(size: 16)
+    static let rcCallout = Font.system(size: 15)
+    static let rcSubheadline = Font.system(size: 14)
+    static let rcCaption = Font.system(size: 13)
+    static let rcCaption2 = Font.system(size: 12)
+    static let rcHeadline = Font.system(size: 17, weight: .semibold)
+    static let rcTitle3 = Font.system(size: 19)
+    static let rcTitle2 = Font.system(size: 22)
+    static let rcLargeTitle = Font.system(size: 30)
+    #else
+    static let rcBody = Font.body
+    static let rcCallout = Font.callout
+    static let rcSubheadline = Font.subheadline
+    static let rcCaption = Font.caption
+    static let rcCaption2 = Font.caption2
+    static let rcHeadline = Font.headline
+    static let rcTitle3 = Font.title3
+    static let rcTitle2 = Font.title2
+    static let rcLargeTitle = Font.largeTitle
+    #endif
+}
+
 struct SitePicker: View {
     @Environment(Model.self) private var model
 
@@ -19,7 +45,7 @@ struct SitePicker: View {
             }
             .pickerStyle(.menu)
         } else if let s = model.sites.first {
-            Label(s, systemImage: "globe").font(.headline)
+            Label(s, systemImage: "globe").font(.rcHeadline)
         }
     }
 }
@@ -44,11 +70,11 @@ struct Tile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label(title, systemImage: icon).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Text(value).font(.title2.bold()).monospacedDigit().contentTransition(.numericText())
+            Label(title, systemImage: icon).font(.rcCaption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(value).font(.rcTitle2.bold()).monospacedDigit().contentTransition(.numericText())
             if let change {
                 Text(change >= 0 ? "▲ \(change)%" : "▼ \(-change)%")
-                    .font(.caption.bold()).foregroundStyle(change >= 0 ? .green : .orange)
+                    .font(.rcCaption.bold()).foregroundStyle(change >= 0 ? .green : .orange)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,16 +146,17 @@ struct RankList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: icon).font(.headline)
+            Label(title, systemImage: icon).font(.rcHeadline)
             if rows.isEmpty {
-                Text("Nothing yet for these dates.").font(.callout).foregroundStyle(.secondary)
+                Text("Nothing yet for these dates.").font(.rcCallout).foregroundStyle(.secondary)
             }
-            let top = max(1, rows.first?.value ?? 1)
-            ForEach(rows.prefix(limit)) { r in
+            let sorted = rows.sorted { $0.value > $1.value }
+            let top = max(1, sorted.first?.value ?? 1)
+            ForEach(sorted.prefix(limit)) { r in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(r.name).lineLimit(1).truncationMode(.middle)
-                        if let d = r.detail { Text(d).font(.caption).foregroundStyle(.secondary) }
+                        if let d = r.detail { Text(d).font(.rcCaption).foregroundStyle(.secondary) }
                     }
                     Spacer()
                     Text(Num.short(r.value)).monospacedDigit().bold()
@@ -155,7 +182,7 @@ struct ErrorBanner: View {
     var body: some View {
         if let e = model.error {
             Label(e, systemImage: "exclamationmark.triangle.fill")
-                .font(.callout).foregroundStyle(.orange)
+                .font(.rcCallout).foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
                 .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
@@ -177,7 +204,7 @@ struct TodayContent: View {
             } else if let o = model.overview {
                 if let now = o.totals.on_site_now {
                     Label("\(now) Real-Time Active Visitors", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.subheadline.bold()).foregroundStyle(.green)
+                        .font(.rcSubheadline.bold()).foregroundStyle(.green)
                 }
                 TilesView(o: o, columns: columns)
                 VisitorsChart(o: o)
@@ -203,12 +230,12 @@ struct LiveContent: View {
             if let l = model.live {
                 HStack(alignment: .firstTextBaseline) {
                     Text("\(l.total)").font(.system(size: 56, weight: .bold, design: .rounded)).monospacedDigit().contentTransition(.numericText())
-                    Text("Real-Time Active Visitors").font(.headline).foregroundStyle(.secondary)
+                    Text("Real-Time Active Visitors").font(.rcHeadline).foregroundStyle(.secondary)
                 }
                 RankList(title: "Pages being read now", icon: "doc.text.magnifyingglass", rows: l.pages.map { .init(name: $0.path, value: $0.n) })
                 RankList(title: "Where they came from", icon: "arrow.down.right.circle", rows: l.sources.map { .init(name: $0.name, value: $0.n) })
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("Visitor trails", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.headline)
+                    Label("Visitor trails", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.rcHeadline)
                     ForEach(Array(l.visitors.enumerated()), id: \.offset) { item in VisitorRow(v: item.element) }
                     if l.visitors.isEmpty { Text("Nobody on the site right now.").foregroundStyle(.secondary) }
                 }
@@ -238,13 +265,13 @@ struct VisitorRow: View {
                 Text(Num.flag(v.country))
                 Text([v.town, v.region].filter { !$0.isEmpty }.joined(separator: ", ").ifEmpty(v.country)).bold()
                 Spacer()
-                Text(v.away > 0 ? "Away" : "Reading").font(.caption.bold()).foregroundStyle(v.away > 0 ? Color.secondary : Color.green)
+                Text(v.away > 0 ? "Away" : "Reading").font(.rcCaption.bold()).foregroundStyle(v.away > 0 ? Color.secondary : Color.green)
             }
-            Text("\(v.source.ifEmpty("Direct")) · \(v.device) · \(v.browser)").font(.caption).foregroundStyle(.secondary)
+            Text("\(v.source.ifEmpty("Direct")) · \(v.device) · \(v.browser)").font(.rcCaption).foregroundStyle(.secondary)
             ForEach(Array(v.steps.suffix(4).enumerated()), id: \.offset) { item in
                 let s = item.element
                 Label(s.kind == "click" ? (s.target ?? s.path) : s.path, systemImage: s.kind == "click" ? "cursorarrow.click" : "doc")
-                    .font(.caption).lineLimit(1).truncationMode(.middle)
+                    .font(.rcCaption).lineLimit(1).truncationMode(.middle)
             }
         }
         .padding(.vertical, 6)
@@ -265,15 +292,15 @@ struct HealthContent: View {
             if let h = model.health {
                 if h.health.isEmpty {
                     Label("Nothing needs fixing. Your website looks healthy.", systemImage: "checkmark.seal.fill")
-                        .font(.headline).foregroundStyle(.green)
+                        .font(.rcHeadline).foregroundStyle(.green)
                 }
                 ForEach(h.health) { item in
                     VStack(alignment: .leading, spacing: 8) {
                         Label(item.title, systemImage: item.level == "fix" ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
-                            .font(.headline).foregroundStyle(item.level == "fix" ? .red : .orange)
-                        Text(item.detail).font(.callout)
+                            .font(.rcHeadline).foregroundStyle(item.level == "fix" ? .red : .orange)
+                        Text(item.detail).font(.rcCallout)
                         ForEach(item.links, id: \.self) { l in
-                            if let u = URL(string: l) { Link(destination: u) { Label(l, systemImage: "link").font(.caption).lineLimit(1) } }
+                            if let u = URL(string: l) { Link(destination: u) { Label(l, systemImage: "link").font(.rcCaption).lineLimit(1) } }
                         }
                         HStack(spacing: 10) {
                             if item.key != nil {
@@ -293,29 +320,29 @@ struct HealthContent: View {
                 }
                 if !h.marked.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("Marked as fixed", systemImage: "checkmark.circle").font(.headline)
+                        Label("Marked as fixed", systemImage: "checkmark.circle").font(.rcHeadline)
                         ForEach(h.marked, id: \.key) { m in
                             HStack {
-                                Text(m.title).font(.callout)
+                                Text(m.title).font(.rcCallout)
                                 Spacer()
                                 Button {
                                     Task { await model.markFixed(.init(level: "", title: m.title, detail: "", links: [], key: m.key), undo: true) }
                                 } label: {
                                     Label("Undo", systemImage: "arrow.uturn.backward")
                                 }
-                                .buttonStyle(.borderless).font(.caption)
+                                .buttonStyle(.borderless).font(.rcCaption)
                             }
                         }
                     }
                 }
                 if !h.what_to_fix.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        Label("What to fix", systemImage: "wrench.and.screwdriver").font(.headline)
+                        Label("What to fix", systemImage: "wrench.and.screwdriver").font(.rcHeadline)
                         ForEach(h.what_to_fix) { f in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(f.page).bold().lineLimit(1).truncationMode(.middle)
-                                Text(f.what).font(.callout)
-                                Label(f.todo, systemImage: "lightbulb").font(.callout).foregroundStyle(.secondary)
+                                Text(f.what).font(.rcCallout)
+                                Label(f.todo, systemImage: "lightbulb").font(.rcCallout).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -392,7 +419,7 @@ struct SearchesContent: View {
                 Label(problem, systemImage: "info.circle").foregroundStyle(.secondary)
             } else if let data {
                 RankList(title: "Google searches", icon: "magnifyingglass", rows: data.rows.map { .init(name: $0.name, value: $0.clicks, detail: "\($0.impressions.formatted()) seen · place \(String(format: "%.1f", $0.position ?? 0))") }, limit: 50)
-                Text("Google's figures arrive two or three days late.").font(.caption).foregroundStyle(.secondary)
+                Text("Google's figures arrive two or three days late.").font(.rcCaption).foregroundStyle(.secondary)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }

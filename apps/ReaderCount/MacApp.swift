@@ -55,6 +55,8 @@ struct MacRoot: View {
                     detail
                 }
                 .padding(24)
+                .font(.rcBody)
+                .controlSize(.large)
                 .frame(maxWidth: 1040)
                 .frame(maxWidth: .infinity)
             }
@@ -92,7 +94,7 @@ struct MacRoot: View {
         case .health: HealthContent()
         case .alerts:
             Form { AlertsSettings() }.formStyle(.grouped)
-            Text("Alerts come as a notification on this Mac, as well as any emails you've chosen on the website.").font(.callout).foregroundStyle(.secondary)
+            Text("Alerts come as a notification on this Mac, as well as any emails you've chosen on the website.").font(.rcCallout).foregroundStyle(.secondary)
         default:
             if let item = MoreItem(rawValue: (pane ?? .overview).rawValue) { item.content }
         }
@@ -126,8 +128,8 @@ struct AccountFooter: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
-            Text(model.me?.email ?? "").font(.caption).lineLimit(1)
-            if let p = model.me?.plan { Text("\(p.name) plan").font(.caption2).foregroundStyle(.secondary) }
+            Text(model.me?.email ?? "").font(.rcCaption).lineLimit(1)
+            if let p = model.me?.plan { Text("\(p.name) plan").font(.rcCaption2).foregroundStyle(.secondary) }
             HStack {
                 Link(destination: Shared.app) { Label("Website", systemImage: "safari") }
                 Spacer()
@@ -137,7 +139,7 @@ struct AccountFooter: View {
                     Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
             }
-            .buttonStyle(.borderless).font(.caption)
+            .buttonStyle(.borderless).font(.rcCaption)
         }
         .padding(12)
     }
@@ -169,16 +171,16 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !model.signedIn {
-                Text("Sign in to see your readers.").font(.callout)
+                Text("Sign in to see your readers.").font(.rcCallout)
             } else if let s = model.summary {
-                Text("\(s.totalNow) Real-Time Active Visitors").font(.headline)
+                Text("\(s.totalNow) Real-Time Active Visitors").font(.rcHeadline)
                 ForEach(s.sites) { site in
                     HStack {
                         Text(site.site).lineLimit(1)
                         Spacer()
                         Text("\(site.on_site_now) now · \(site.today) today").monospacedDigit().foregroundStyle(.secondary)
                     }
-                    .font(.callout)
+                    .font(.rcCallout)
                 }
             } else {
                 ProgressView()
