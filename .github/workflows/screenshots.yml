@@ -1,0 +1,91 @@
+# Screenshots of the apps with sample stats (demo mode: start with -demo -tab X). Runs by hand, or on a push whose
+# commit message says [screenshots]. The pictures go to the app-screenshots branch.
+name: Screenshots
+
+on:
+  push:
+    paths: ["apps/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[screenshots]') }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+      - name: Make the Xcode project
+        run: |
+          curl -fsSL -o /tmp/xcodegen.zip https://github.com/yonaskolb/XcodeGen/releases/download/2.42.0/xcodegen.zip
+          unzip -q /tmp/xcodegen.zip -d /tmp/xg
+          DEVELOPMENT_TEAM="" /tmp/xg/xcodegen/bin/xcodegen generate
+      - name: Build for the simulators and the Mac
+        run: |
+          set -o pipefail
+          xcodebuild build -project ReaderCount.xcodeproj -scheme ReaderCount -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO -quiet
+          xcodebuild build -project ReaderCount.xcodeproj -scheme ReaderCount -configuration Debug -destination 'platform=macOS' \
+            -derivedDataPath build/mac CODE_SIGNING_ALLOWED=NO -quiet
+      - name: iPhone and iPad
+        run: |
+          set -x
+          APP=$(find build/ios -name "*.app" -path "*iphonesimulator*" -maxdepth 6 | head -1)
+          mkdir -p shots
+          shoot() {
+            UDID=$(xcrun simctl list devices available -j | python3 -c "import sys,json;d=json.load(sys.stdin)['devices'];print(next(x['udid'] for r in d.values() for x in r if x['name']=='$1'))")
+            xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+            xcrun simctl install "$UDID" "$APP"
+            for tab in today live health more account signin; do
+              if [ "$tab" = signin ]; then ARGS=""; else ARGS="-demo -tab $tab -AppleLanguages (en-GB) -AppleLocale en_GB"; fi
+              xcrun simctl launch --terminate-running-process "$UDID" com.readercount.app $ARGS
+              sleep 7
+              xcrun simctl io "$UDID" screenshot "shots/$2-$tab.png"
+            done
+            xcrun simctl shutdown "$UDID"
+          }
+          IPHONE=$(xcrun simctl list devices available | grep -oE "iPhone 1[6-9] Pro Max" | head -1)
+          [ -n "$IPHONE" ] || IPHONE=$(xcrun simctl list devices available | grep -oE "iPhone [0-9]+ Pro" | head -1)
+          IPAD=$(xcrun simctl list devices available | grep -oE "iPad Pro 13-inch \(M[0-9]\)" | head -1)
+          shoot "$IPHONE" iphone
+          shoot "$IPAD" ipad || true
+      - name: Mac
+        continue-on-error: true
+        run: |
+          mkdir -p shots
+          MAC=$(find build/mac -name "*.app" -path "*Debug*" -maxdepth 5 | head -1)
+          for pane in overview live health sources; do
+            open -n "$MAC" --args -demo -tab $pane -AppleLanguages "(en-GB)" -AppleLocale en_GB
+            sleep 14
+            screencapture -x shots/mac-$pane.png
+            WIN=$(cat $(find /var/folders "$HOME/Library/Containers" -name "readercount-win.txt" 2>/dev/null | head -1) 2>/dev/null)
+            if [ -n "$WIN" ]; then screencapture -o -x -l "$WIN" shots/mac-$pane.png || true; fi
+            find /var/folders "$HOME/Library/Containers" -name "readercount-win.txt" -delete 2>/dev/null || true
+            pkill -x ReaderCount || true
+            sleep 2
+          done
+      - name: Save to the app-screenshots branch
+        if: always()
+        run: |
+          cd shots 2>/dev/null || exit 0
+          git init -q -b app-screenshots
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "Screenshots from ${GITHUB_SHA}" > README.md
+          git add -A && git commit -q -m "Screenshots from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" app-screenshots

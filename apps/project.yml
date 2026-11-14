@@ -1,0 +1,87 @@
+# The ReaderCount app for iPhone, iPad and Mac, as an XcodeGen project. GitHub Actions runs `xcodegen` to make
+# ReaderCount.xcodeproj and builds it on a Mac, so nobody needs Xcode to change it.
+name: ReaderCount
+options:
+  bundleIdPrefix: com.readercount
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: ${DEVELOPMENT_TEAM}
+    CODE_SIGN_STYLE: Automatic
+targets:
+  ReaderCount:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: ReaderCount
+      - path: Shared
+    dependencies:
+      - target: ReaderCountWidget
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.readercount.app
+        PRODUCT_NAME: ReaderCount
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: ReaderCount
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.business
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_NSHumanReadableCopyright: © ReaderCount
+        CODE_SIGN_ENTITLEMENTS: ReaderCount/ReaderCount-iOS.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": ReaderCount/ReaderCount-macOS.entitlements
+        "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_USER_SELECTED_FILES: readwrite
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+    info:
+      path: ReaderCount/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.readercount.app.signin
+            CFBundleURLSchemes: [readercount]
+  ReaderCountWidget:
+    type: app-extension
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: ReaderCountWidget
+      - path: Shared
+    info:
+      path: ReaderCountWidget/Info.plist
+      properties:
+        CFBundleDisplayName: ReaderCount
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.readercount.app.widget
+        PRODUCT_NAME: ReaderCountWidget
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: ReaderCountWidget/ReaderCountWidget-iOS.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": ReaderCountWidget/ReaderCountWidget-macOS.entitlements
+        "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
+        SUPPORTS_MACCATALYST: NO
+schemes:
+  ReaderCount:
+    build:
+      targets:
+        ReaderCount: all
+    run:
+      config: Debug
+    archive:
+      config: Release
