@@ -570,11 +570,11 @@ struct TodayContent: View {
             if model.sites.isEmpty {
                 ContentUnavailableView("No websites yet", systemImage: "globe", description: Text("Add your website at readercount.com, then pull down to refresh."))
             } else if let o = model.overview {
-                if let now = o.totals.on_site_now {
-                    Label("\(now) Real-Time Active Visitors", systemImage: "dot.radiowaves.left.and.right")
-                        .font(.rcSubheadline.bold()).foregroundStyle(.green)
-                }
                 HStack {
+                    if let now = o.totals.on_site_now {
+                        Label("\(now) Real-Time Active Visitors", systemImage: "dot.radiowaves.left.and.right")
+                            .font(.rcSubheadline.bold()).foregroundStyle(.green)
+                    }
                     Spacer()
                     ShareReportButton(o: o)
                 }
