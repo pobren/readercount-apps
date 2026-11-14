@@ -3,7 +3,6 @@
 import SwiftUI
 import UserNotifications
 import WidgetKit
-import AuthenticationServices
 
 enum Period: String, CaseIterable, Identifiable {
     case today, week = "7d", month = "30d", year = "12m"
@@ -61,20 +60,30 @@ final class Model {
 
     // MARK: Signing in and out
 
-    /// Opens ReaderCount's own sign in page in Apple's secure sheet (email code or passkey), then saves the tokens.
-    func signIn(using session: WebAuthenticationSession) async {
-        let pkce = PKCE()
+    /// Signing in inside the app: the email gets a six-digit code (true when it was sent).
+    func requestCode(email: String) async -> Bool {
         busy = true
         defer { busy = false }
         do {
-            let back = try await session.authenticate(using: pkce.authorizeURL, callbackURLScheme: "readercount", preferredBrowserSession: .ephemeral)
-            try await API.shared.finishSignIn(callback: back, pkce: pkce)
+            _ = try await API.shared.requestCode(email: email.trimmingCharacters(in: .whitespaces))
+            error = nil
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Then the code from the email, which saves the tokens.
+    func signIn(email: String, code: String) async {
+        busy = true
+        defer { busy = false }
+        do {
+            try await API.shared.signIn(email: email.trimmingCharacters(in: .whitespaces), code: code.filter(\.isNumber))
             signedIn = true
             error = nil
             await refresh()
             await askForPush()
-        } catch let e as ASWebAuthenticationSessionError where e.code == .canceledLogin {
-            // They closed the sheet.
         } catch {
             self.error = error.localizedDescription
         }

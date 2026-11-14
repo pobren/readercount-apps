@@ -100,6 +100,35 @@ actor API {
         try await tokenRequest(["grant_type": "authorization_code", "code": code, "client_id": Shared.clientID, "redirect_uri": Shared.redirect, "code_verifier": pkce.verifier])
     }
 
+    /// Signing in inside the app, like Site Patrol: step one emails a six-digit code. Answers the email it went to.
+    func requestCode(email: String) async throws -> String {
+        let j = try await signInPost("app/v1/signin/code", ["email": email])
+        return (j["email"] as? String) ?? email
+    }
+
+    /// Step two: the code from the email, swapped for the app's tokens.
+    func signIn(email: String, code: String) async throws {
+        let j = try await signInPost("app/v1/signin/token", ["email": email, "code": code])
+        guard let access = j["access_token"] as? String, let refresh = j["refresh_token"] as? String else {
+            throw APIError(message: "Sign in didn't finish. Please try again.", status: 0)
+        }
+        let seconds = (j["expires_in"] as? Double) ?? 3600
+        Tokens(access: access, refresh: refresh, expires: Date().addingTimeInterval(seconds - 60)).save()
+    }
+
+    private func signInPost(_ path: String, _ body: [String: String]) async throws -> [String: Any] {
+        var r = URLRequest(url: Shared.app.appending(path: path))
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "content-type")
+        r.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await session.data(for: r)
+        let j = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw APIError(message: (j["error"] as? String) ?? "ReaderCount couldn't be reached. Please try again.", status: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return j
+    }
+
     private func tokenRequest(_ form: [String: String]) async throws {
         var r = URLRequest(url: Shared.auth.appending(path: "token"))
         r.httpMethod = "POST"
