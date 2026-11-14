@@ -82,47 +82,10 @@ struct MoreView: View {
 }
 
 struct AccountView: View {
-    @Environment(Model.self) private var model
-
     var body: some View {
         NavigationStack {
-            List {
-                Section("Signed in as") {
-                    Label(model.me?.email ?? "…", systemImage: "person.crop.circle")
-                    if let p = model.me?.plan { Label("\(p.name) plan", systemImage: "star") }
-                }
-                Section {
-                    ForEach(model.summary?.sites ?? []) { s in
-                        HStack {
-                            Text(s.site)
-                            Spacer()
-                            Text("\(s.today) today").foregroundStyle(.secondary).monospacedDigit()
-                        }
-                    }
-                } header: {
-                    Text("Your websites")
-                }
-                Section {
-                    AlertsSettings()
-                } header: {
-                    Text("Alerts on this device")
-                } footer: {
-                    Text("Alerts come as a notification on this device, as well as any emails you've chosen on the website.")
-                }
-                Section {
-                    Link(destination: URL(string: "https://readercount.com/help/")!) { Label("Help guides", systemImage: "book") }
-                    Link(destination: URL(string: "mailto:hello@readercount.com")!) { Label("Email us", systemImage: "envelope") }
-                    Link(destination: URL(string: "https://readercount.com/privacy/")!) { Label("Privacy", systemImage: "hand.raised") }
-                }
-                Section {
-                    Button(role: .destructive) {
-                        Task { await model.signOut() }
-                    } label: {
-                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                }
-            }
-            .navigationTitle("Account")
+            List { AccountSections() }
+                .navigationTitle("Account")
         }
     }
 }

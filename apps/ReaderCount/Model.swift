@@ -136,6 +136,17 @@ final class Model {
         do { overview = try await API.shared.get(Overview.self, "app/v1/overview", ["site": current, "period": period.rawValue]) } catch { handle(error) }
     }
 
+    /// Towns with their region and country, for the map.
+    func places() async -> [Place] {
+        if Demo.on {
+            return [Place(town: "London", region: "England", country: "GB", visitors: 402), Place(town: "Leeds", region: "England", country: "GB", visitors: 188),
+                    Place(town: "Manchester", region: "England", country: "GB", visitors: 161), Place(town: "Dublin", region: "Leinster", country: "IE", visitors: 140),
+                    Place(town: "New York City", region: "New York", country: "US", visitors: 120), Place(town: "Berlin", region: "Berlin", country: "DE", visitors: 64)]
+        }
+        guard !current.isEmpty else { return [] }
+        return (try? await API.shared.get(Places.self, "app/v1/places", ["site": current, "period": period.rawValue]))?.places ?? []
+    }
+
     func loadLive() async {
         if Demo.on { live = Demo.live; return }
         guard !current.isEmpty else { return }
@@ -148,7 +159,7 @@ final class Model {
         do { health = try await API.shared.get(Health.self, "app/v1/health", ["site": current, "period": period.rawValue]) } catch { handle(error) }
     }
 
-    func breakdown(_ by: String, clicks: Bool = false) async -> Breakdown? {
+    func breakdown(_ by: String, clicks: Bool = false, filters: [String: String] = [:]) async -> Breakdown? {
         if Demo.on, let o = Demo.overview {
             let rows: [(String, Int)] = switch by {
             case "country": o.countries.map { ($0.country, $0.visitors) }
@@ -157,6 +168,8 @@ final class Model {
             case "campaign": o.campaigns.map { ($0.campaign, $0.visitors) }
             case "link": o.clicks.map { ($0.link, $0.clicks) }
             case "town": [("London", 402), ("Leeds", 188), ("Manchester", 161), ("Dublin", 140), ("Bristol", 97)]
+            case "page": o.top_pages.map { ($0.page, $0.visitors) }
+            case "day": o.per_day.map { ($0.day, $0.visitors) }
             default: o.sources.map { ($0.source, $0.visitors) }
             }
             let json = try? JSONSerialization.data(withJSONObject: ["by": by, "rows": rows.map { [by: $0.0, "visitors": $0.1] }])
@@ -165,6 +178,7 @@ final class Model {
         guard !current.isEmpty else { return nil }
         var q = ["site": current, "by": by, "period": period.rawValue, "limit": "50"]
         if clicks { q["of"] = "clicks" }
+        q.merge(filters) { _, new in new }
         do { return try await API.shared.get(Breakdown.self, "app/v1/breakdown", q) } catch { handle(error); return nil }
     }
 

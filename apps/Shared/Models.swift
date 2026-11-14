@@ -66,6 +66,7 @@ struct Overview: Codable {
     struct Browser: Codable, Hashable { let browser: String; let visitors: Int }
     struct Campaign: Codable, Hashable { let campaign: String; let visitors: Int }
     struct Click: Codable, Hashable { let link: String; let type: String?; let page: String?; let clicks: Int }
+    struct Goal: Codable, Hashable { let goal: String; let completions: Int; let visitors: Int }
 
     let site: String
     let period: String
@@ -74,6 +75,10 @@ struct Overview: Codable {
     let totals: Totals
     let previous_period: Previous
     let per_day: [Day]
+    /// Today only: one point per hour so far.
+    var per_hour: [Day]? = nil
+    /// Goals and sign-ups (missing from older servers).
+    var goals: [Goal]? = nil
     let top_pages: [Page]
     let sources: [Source]
     let campaigns: [Campaign]

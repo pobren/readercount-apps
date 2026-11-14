@@ -7,14 +7,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum MacPane: String, CaseIterable, Identifiable, Hashable {
-    case overview, live, health, google, sources, clicks, countries, towns, devices, browsers, campaigns, alerts
+    case overview, live, health, google, sources, clicks, countries, towns, devices, browsers, campaigns, account
     var id: String { rawValue }
     var title: String {
         switch self {
         case .overview: "Overview"
         case .live: "Live"
         case .health: "Site Health"
-        case .alerts: "Alerts"
+        case .account: "Account"
         default: MoreItem(rawValue: rawValue)?.title ?? rawValue
         }
     }
@@ -23,7 +23,7 @@ enum MacPane: String, CaseIterable, Identifiable, Hashable {
         case .overview: "chart.xyaxis.line"
         case .live: "dot.radiowaves.left.and.right"
         case .health: "stethoscope"
-        case .alerts: "bell.badge"
+        case .account: "person.crop.circle"
         default: MoreItem(rawValue: rawValue)?.icon ?? "circle"
         }
     }
@@ -44,12 +44,13 @@ struct MacRoot: View {
                     ForEach([MacPane.google, .sources, .clicks, .countries, .towns, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }
                 }
                 Section("Account") {
-                    Label(MacPane.alerts.title, systemImage: MacPane.alerts.icon).tag(MacPane.alerts)
+                    Label(MacPane.account.title, systemImage: MacPane.account.icon).tag(MacPane.account)
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
             .safeAreaInset(edge: .bottom) { AccountFooter() }
         } detail: {
+            NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     detail
@@ -82,6 +83,8 @@ struct MacRoot: View {
                     .keyboardShortcut("r")
                 }
             }
+            }
+            .id(pane)
         }
         .fileExporter(isPresented: $exporting, document: CSVFile(text: csv()), contentType: .commaSeparatedText, defaultFilename: "\(model.current) \(model.period.label).csv") { _ in }
         .task { await model.refresh() }
@@ -92,9 +95,8 @@ struct MacRoot: View {
         case .overview: TodayContent(columns: 4)
         case .live: LiveContent()
         case .health: HealthContent()
-        case .alerts:
-            Form { AlertsSettings() }.formStyle(.grouped)
-            Text("Alerts come as a notification on this Mac, as well as any emails you've chosen on the website.").font(.rcCallout).foregroundStyle(.secondary)
+        case .account:
+            Form { AccountSections() }.formStyle(.grouped).scrollDisabled(true).frame(minHeight: 760)
         default:
             if let item = MoreItem(rawValue: (pane ?? .overview).rawValue) { item.content }
         }
