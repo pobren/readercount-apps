@@ -337,6 +337,8 @@ struct RankList: View {
     var filters: [String: String] = [:]
     /// What to say when the list is empty.
     var empty = "Nothing yet for these dates."
+    /// Where a row opens, instead of the usual narrowed reports (a country opening its towns).
+    var opens: ((Row) -> AnyView)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -353,7 +355,7 @@ struct RankList: View {
             ForEach(sorted.prefix(limit)) { r in
                 if let drill, r.name != "(none)" {
                     NavigationLink {
-                        DrillView(filters: filters.merging([drill: r.key ?? r.name]) { _, new in new })
+                        if let opens { opens(r) } else { DrillView(filters: filters.merging([drill: r.key ?? r.name]) { _, new in new }) }
                     } label: {
                         line(r, top: top, chevron: true)
                     }
@@ -1445,6 +1447,10 @@ struct BreakdownContent: View {
     let icon: String
     let by: String
     var clicks = false
+    /// Narrowed to these (the towns of one country).
+    var filters: [String: String] = [:]
+    /// On Places: a country opens a list of its towns.
+    var countryOpensTowns = false
     @State private var data: Breakdown?
     /// Each town's country, so towns show a flag like countries do.
     @State private var townCountry: [String: String] = [:]
@@ -1465,19 +1471,57 @@ struct BreakdownContent: View {
                 if data.rows.count > 1 {
                     ShareChart(title: clicks ? "Share of clicks" : "Share of visitors", rows: data.rows.map { (label($0.name), $0.count) })
                 }
-                RankList(title: title, icon: icon, rows: data.rows.map { .init(name: label($0.name), value: $0.count, key: $0.name) }, limit: 50, drill: clicks ? nil : by)
+                RankList(title: title, icon: icon, rows: data.rows.map { .init(name: label($0.name), value: $0.count, key: $0.name) }, limit: 50, drill: clicks ? nil : by, filters: filters,
+                         opens: by == "country" && countryOpensTowns ? { (r: RankList.Row) -> AnyView in AnyView(CountryTowns(code: r.key ?? r.name)) } : nil)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }
         }
-        .task(id: model.current + model.datesKey + by) {
-            data = await model.breakdown(by, clicks: clicks)
+        .task(id: model.current + model.datesKey + by + filters.description) {
+            data = await model.breakdown(by, clicks: clicks, filters: filters)
             if by == "town" && !clicks {
                 var map: [String: String] = [:]
                 for p in await model.places() where map[p.town] == nil { map[p.town] = p.country }
                 townCountry = map
             }
         }
+    }
+}
+
+/// Places: countries first (each opens its towns), with a switch to every town at once.
+struct PlacesContent: View {
+    @State private var towns = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("Show", selection: $towns) {
+                Label("Countries", systemImage: "globe.europe.africa").tag(false)
+                Label("Towns", systemImage: "building.2").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 360)
+            if towns {
+                BreakdownContent(title: "Towns", icon: "building.2", by: "town")
+            } else {
+                BreakdownContent(title: "Countries", icon: "globe.europe.africa", by: "country", countryOpensTowns: true)
+            }
+        }
+    }
+}
+
+/// One country's towns, opened from Places. Each town opens its own reports as usual.
+struct CountryTowns: View {
+    let code: String
+
+    var body: some View {
+        let name = Locale.current.localizedString(forRegionCode: code) ?? code
+        ScrollView {
+            BreakdownContent(title: "Towns in \(name)", icon: "building.2", by: "town", filters: ["country": code])
+                .padding()
+                .frame(maxWidth: 1040)
+                .frame(maxWidth: .infinity)
+        }
+        .navigationTitle("\(Num.flag(code)) \(name)")
     }
 }
 
@@ -1509,7 +1553,7 @@ struct SearchesContent: View {
 
 /// The More list: each breakdown the website has, opened on its own screen.
 enum MoreItem: String, CaseIterable, Identifiable {
-    case alerts, housekeeping, trails, google, sources, clicks, countries, towns, devices, browsers, campaigns
+    case alerts, housekeeping, trails, google, sources, clicks, countries, devices, browsers, campaigns
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -1519,8 +1563,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
         case .google: "Google search"
         case .sources: "Sources"
         case .clicks: "Clicks"
-        case .countries: "Countries"
-        case .towns: "Towns"
+        case .countries: "Places"
         case .devices: "Devices"
         case .browsers: "Browsers"
         case .campaigns: "Campaigns"
@@ -1535,7 +1578,6 @@ enum MoreItem: String, CaseIterable, Identifiable {
         case .sources: "arrow.down.right.circle"
         case .clicks: "cursorarrow.click.2"
         case .countries: "globe.europe.africa"
-        case .towns: "building.2"
         case .devices: "ipad.and.iphone"
         case .browsers: "safari"
         case .campaigns: "megaphone"
@@ -1550,8 +1592,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
         case .google: SearchesContent()
         case .sources: BreakdownContent(title: title, icon: icon, by: "source")
         case .clicks: BreakdownContent(title: title, icon: icon, by: "link", clicks: true)
-        case .countries: BreakdownContent(title: title, icon: icon, by: "country")
-        case .towns: BreakdownContent(title: title, icon: icon, by: "town")
+        case .countries: PlacesContent()
         case .devices: BreakdownContent(title: title, icon: icon, by: "device")
         case .browsers: BreakdownContent(title: title, icon: icon, by: "browser")
         case .campaigns: BreakdownContent(title: title, icon: icon, by: "campaign")

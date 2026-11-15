@@ -7,7 +7,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum MacPane: String, CaseIterable, Identifiable, Hashable {
-    case overview, live, health, trails, alerts, housekeeping, google, sources, clicks, countries, towns, devices, browsers, campaigns, account
+    case overview, live, health, trails, alerts, housekeeping, google, sources, clicks, countries, devices, browsers, campaigns, account
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -44,7 +44,7 @@ struct MacRoot: View {
                     Label(MacPane.housekeeping.title, systemImage: MacPane.housekeeping.icon).tag(MacPane.housekeeping)
                 }
                 Section("More") {
-                    ForEach([MacPane.google, .sources, .clicks, .countries, .towns, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                    ForEach([MacPane.google, .sources, .clicks, .countries, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }
                 }
                 Section("Account") {
                     ForEach([MacPane.alerts, .account]) { p in Label(p.title, systemImage: p.icon).tag(p) }
