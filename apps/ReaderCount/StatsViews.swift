@@ -1291,19 +1291,33 @@ extension String {
 /// Site Health and What to fix, with Mark as fixed.
 struct HealthContent: View {
     @Environment(Model.self) private var model
+    @State private var showDone = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ErrorBanner()
             if let h = model.health {
-                if h.health.isEmpty {
-                    Label("Nothing needs fixing. Your website looks healthy.", systemImage: "checkmark.seal.fill")
-                        .font(.rcHeadline).foregroundStyle(.green)
+                // A summary line: what needs fixing now, ideas to improve, and what you've done.
+                ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    let fix = h.health.filter { $0.level == "fix" }.count
+                    let look = h.health.count - fix
+                    if h.health.isEmpty {
+                        Pill(text: "Nothing needs fixing", icon: "checkmark.seal.fill", tint: .green)
+                    } else {
+                        if fix > 0 { Pill(text: "\(fix) to fix now", icon: "exclamationmark.octagon.fill", tint: .red) }
+                        if look > 0 { Pill(text: "\(look) to look at", icon: "exclamationmark.triangle.fill", tint: .orange) }
+                    }
+                    if !h.what_to_fix.isEmpty { Pill(text: "\(h.what_to_fix.count) ways to improve", icon: "lightbulb.fill", tint: .blue) }
+                    if !h.marked.isEmpty { Pill(text: "\(h.marked.count) done", icon: "checkmark.circle.fill", tint: .gray) }
                 }
+                }
+
                 ForEach(h.health) { item in
+                    let tint: Color = item.level == "fix" ? .red : .orange
                     VStack(alignment: .leading, spacing: 8) {
                         Label(item.title, systemImage: item.level == "fix" ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
-                            .font(.rcHeadline).foregroundStyle(item.level == "fix" ? .red : .orange)
+                            .font(.rcHeadline).foregroundStyle(tint)
                         Text(item.detail).font(.rcCallout)
                         ForEach(item.links, id: \.self) { l in
                             if let u = URL(string: l) { Link(destination: u) { Label(l, systemImage: "link").font(.rcCaption).lineLimit(1) } }
@@ -1320,33 +1334,65 @@ struct HealthContent: View {
                             CopyIssueButton(text: ([item.title, item.detail] + item.links).joined(separator: "\n"))
                         }
                     }
-                    .card()
+                    .issueBox(tint)
                 }
-                if !h.marked.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Marked as fixed", systemImage: "checkmark.circle").font(.rcHeadline)
-                        ForEach(h.marked, id: \.key) { m in
-                            HStack {
-                                Text(m.title).font(.rcCallout)
+
+                if !h.what_to_fix.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Ways to improve", systemImage: "lightbulb").font(.rcTitle3.bold())
+                        Text("Pages that could do better in Google or keep more readers, with what to do about each.").font(.rcCaption).foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 6)
+                    ForEach(h.what_to_fix) { f in
+                        let k = FixKind(f.kind)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: k.icon).foregroundStyle(k.tint)
+                                Text(k.title).font(.rcCaption.bold()).foregroundStyle(k.tint)
                                 Spacer()
-                                Button {
-                                    Task { await model.markFixed(.init(level: "", title: m.title, detail: "", links: [], key: m.key), undo: true) }
-                                } label: {
-                                    Label("Undo", systemImage: "arrow.uturn.backward")
-                                }
-                                .buttonStyle(.borderless).font(.rcCaption)
+                                CopyIssueButton(text: [f.page, f.what, f.todo].joined(separator: "\n")).controlSize(.small)
                             }
+                            Text(f.page == "/" ? "Home page" : f.page).font(.rcHeadline).lineLimit(1).truncationMode(.middle)
+                            Text(f.what).font(.rcCallout)
+                            Label(f.todo, systemImage: "lightbulb").font(.rcCallout).foregroundStyle(.secondary)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(k.tint.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
                         }
+                        .issueBox(k.tint)
                     }
                 }
-                if !h.what_to_fix.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("What to fix", systemImage: "wrench.and.screwdriver").font(.rcHeadline)
-                        ForEach(h.what_to_fix) { f in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(f.page).bold().lineLimit(1).truncationMode(.middle)
-                                Text(f.what).font(.rcCallout)
-                                Label(f.todo, systemImage: "lightbulb").font(.rcCallout).foregroundStyle(.secondary)
+
+                if !h.marked.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            withAnimation { showDone.toggle() }
+                        } label: {
+                            HStack {
+                                Label("Marked as fixed (\(h.marked.count))", systemImage: "checkmark.circle.fill").font(.rcHeadline).foregroundStyle(.green)
+                                Spacer()
+                                Text(showDone ? "Hide" : "Show").font(.rcCaption).foregroundStyle(.secondary)
+                                Image(systemName: showDone ? "chevron.up" : "chevron.down").foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if showDone {
+                            ForEach(h.marked, id: \.key) { m in
+                                Divider()
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(m.title).font(.rcCallout).strikethrough(color: .secondary)
+                                        Text("Marked \(Date(timeIntervalSince1970: m.marked_at / 1000).formatted(.relative(presentation: .named)))").font(.rcCaption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button {
+                                        Task { await model.markFixed(.init(level: "", title: m.title, detail: "", links: [], key: m.key), undo: true) }
+                                    } label: {
+                                        Label("Undo", systemImage: "arrow.uturn.backward")
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                }
                             }
                         }
                     }
@@ -1357,6 +1403,49 @@ struct HealthContent: View {
             }
         }
         .task(id: model.current) { await model.loadHealth() }
+    }
+}
+
+/// The kinds of "ways to improve", each with its own icon and colour.
+struct FixKind {
+    let title: String
+    let icon: String
+    let tint: Color
+    init(_ kind: String) {
+        let t: (String, String, Color) = switch kind {
+        case "page-two": ("Nearly on page one of Google", "arrow.up.forward.circle.fill", .blue)
+        case "slipping", "losing": ("Slipping in Google", "chart.line.downtrend.xyaxis", .orange)
+        case "few-clicks": ("Seen in Google, rarely clicked", "cursorarrow.click.badge.clock", .purple)
+        case "bounce": ("Readers leave quickly", "arrow.uturn.left.circle.fill", .pink)
+        default: ("Worth a look", "lightbulb.fill", .teal)
+        }
+        title = t.0
+        icon = t.1
+        tint = t.2
+    }
+}
+
+struct Pill: View {
+    let text: String
+    let icon: String
+    let tint: Color
+    var body: some View {
+        Label(text, systemImage: icon).font(.rcCaption.bold()).foregroundStyle(tint)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(tint.opacity(0.12), in: Capsule())
+    }
+}
+
+extension View {
+    /// Each issue in its own box, with a coloured edge on the left.
+    func issueBox(_ tint: Color) -> some View {
+        self
+            .padding(16)
+            .padding(.leading, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(alignment: .leading) { UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14).fill(tint).frame(width: 5) }
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.quaternary))
     }
 }
 
