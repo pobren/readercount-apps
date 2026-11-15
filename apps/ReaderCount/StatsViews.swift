@@ -335,6 +335,8 @@ struct RankList: View {
     var drill: String? = nil
     /// Reports already narrowed to (when clicking through more than once).
     var filters: [String: String] = [:]
+    /// What to say when the list is empty.
+    var empty = "Nothing yet for these dates."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -344,7 +346,7 @@ struct RankList: View {
                 if !rows.isEmpty { ExportButton(title: title, rows: rows) }
             }
             if rows.isEmpty {
-                Text("Nothing yet for these dates.").font(.rcCallout).foregroundStyle(.secondary)
+                Text(empty).font(.rcCallout).foregroundStyle(.secondary)
             }
             let sorted = rows.sorted { $0.value > $1.value }
             let top = max(1, sorted.first?.value ?? 1)
@@ -853,21 +855,26 @@ struct LiveContent: View {
                     }
                     .font(.rcCallout)
                 }
-                RankList(title: "Pages being read now", icon: "doc.text.magnifyingglass", rows: l.pages.map { .init(name: $0.path, value: $0.n) })
-                RankList(title: "Where they came from", icon: "arrow.down.right.circle", rows: l.sources.map { .init(name: $0.name, value: $0.n) })
+                RankList(title: "Pages being read now", icon: "doc.text.magnifyingglass", rows: l.pages.map { .init(name: $0.path, value: $0.n) }, empty: "Nobody is reading a page right now.")
+                RankList(title: "Where they came from", icon: "arrow.down.right.circle", rows: l.sources.map { .init(name: $0.name, value: $0.n) }, empty: "This fills in when someone arrives.")
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Label("On the site now", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.rcHeadline)
-                        Spacer()
-                        NavigationLink {
-                            ScrollView { TrailsContent().padding().frame(maxWidth: 1040).frame(maxWidth: .infinity) }.navigationTitle("Visitor trails")
-                        } label: {
-                            Label("All of today's trails", systemImage: "list.bullet.below.rectangle")
-                        }
-                        .buttonStyle(.bordered)
-                    }
+                    Label("On the site now", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.rcHeadline)
                     ForEach(Array(l.visitors.enumerated()), id: \.offset) { item in VisitorRow(v: item.element) }
                     if l.visitors.isEmpty { Text("Nobody on the site right now.").foregroundStyle(.secondary) }
+                    Divider()
+                    // A plain row at the foot of the card, so it never squashes beside the heading on a phone.
+                    NavigationLink {
+                        ScrollView { TrailsContent().padding().frame(maxWidth: 1040).frame(maxWidth: .infinity) }.navigationTitle("Visitor trails")
+                    } label: {
+                        HStack {
+                            Label("See all of today's visitor trails", systemImage: "list.bullet.below.rectangle")
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tint)
                 }
                 .card()
             } else {
