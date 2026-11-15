@@ -44,6 +44,16 @@ enum AlertKind: String, CaseIterable, Identifiable {
         case .source: "sparkles"
         }
     }
+    var blurb: String {
+        switch self {
+        case .above: "Hear when a busy day or a popular page takes off."
+        case .below: "Hear when visitors fall under what you expect."
+        case .stopped: "Hear if no one has visited for a few hours."
+        case .bounce: "Hear when most readers leave after one page."
+        case .health: "Hear when Site Health finds a new problem."
+        case .source: "Hear when a website you haven't seen before links to you."
+        }
+    }
     var tint: Color {
         switch self {
         case .above: .green
@@ -147,11 +157,13 @@ struct AlertsContent: View {
                 Text("We check every hour and send a notification to your devices. Each alert sends at most once an hour or once a day, so it won't flood you.")
                     .font(.rcCaption).foregroundStyle(.secondary)
                 if loaded && mine.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("No alerts yet. Some good ones to start with:").font(.rcCallout)
-                        ForEach([AlertKind.stopped, .above, .source, .health]) { k in
-                            Button { editing = blank(k) } label: { Label(k.title, systemImage: k.icon) }
-                                .buttonStyle(.bordered)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
+                            ForEach([AlertKind.stopped, .above, .source, .health]) { k in
+                                Button { editing = blank(k) } label: { StarterTile(kind: k) }
+                                    .buttonStyle(.plain)
+                            }
                         }
                     }
                 }
@@ -203,6 +215,28 @@ struct AlertsContent: View {
             AlertEditor(rule: r) { await load() }
                 .environment(model)
         }
+    }
+}
+
+/// One suggested alert, shown as a tile so the starters sit side by side rather than in one tall list.
+struct StarterTile: View {
+    let kind: AlertKind
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: kind.icon).font(.rcTitle3).foregroundStyle(kind.tint)
+                Spacer()
+                Image(systemName: "plus.circle.fill").foregroundStyle(.tint)
+            }
+            Text(kind.title).font(.rcBody).bold().multilineTextAlignment(.leading)
+            Text(kind.blurb).font(.rcCaption).foregroundStyle(.secondary).multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
+        .background(kind.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(kind.tint.opacity(0.25)))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

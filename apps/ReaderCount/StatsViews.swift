@@ -1255,9 +1255,15 @@ struct AlertsSettings: View {
         if model.pushAllowed == false {
             Label("Alerts are switched off for ReaderCount in Settings.", systemImage: "bell.slash").foregroundStyle(.secondary)
         }
-        ForEach(Self.kinds, id: \.0) { k in
-            Toggle(isOn: Binding(get: { model.alerts[k.0] ?? false }, set: { on in Task { await model.setAlert(k.0, on) } })) {
-                Label(k.1, systemImage: k.2)
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], alignment: .leading, spacing: 12) {
+            ForEach(Self.kinds, id: \.0) { k in
+                Toggle(isOn: Binding(get: { model.alerts[k.0] ?? false }, set: { on in Task { await model.setAlert(k.0, on) } })) {
+                    Label(k.1, systemImage: k.2).font(.rcBody)
+                }
+                .toggleStyle(.switch)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             }
         }
     }
