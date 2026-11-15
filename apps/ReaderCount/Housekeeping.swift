@@ -2,6 +2,11 @@
 // llms.txt, security.txt, the favicon), as they are, with plain notes on anything wrong. From /app/v1/housekeeping.
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 struct HouseNote: Codable, Hashable { let level: String; let text: String }
 struct HouseFile: Codable, Hashable, Identifiable {
