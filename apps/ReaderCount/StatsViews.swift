@@ -41,6 +41,23 @@ struct SitePicker: View {
 
     var body: some View {
         if model.sites.count > 1 {
+            #if os(macOS)
+            // A Menu with its own label, so the Mac toolbar always shows the name and not just the icon.
+            Menu {
+                ForEach(model.sites, id: \.self) { site in
+                    Button { model.site = site } label: {
+                        Label { Text(site) } icon: { favicon(site) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    favicon(model.current)
+                    Text(model.current).lineLimit(1)
+                }
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            #else
             Picker("Website", selection: Binding(get: { model.current }, set: { model.site = $0 })) {
                 ForEach(model.sites, id: \.self) { site in
                     Label { Text(site) } icon: { favicon(site) }.tag(site)
@@ -48,7 +65,7 @@ struct SitePicker: View {
             }
             .pickerStyle(.menu)
             .labelStyle(.titleAndIcon)
-            .fixedSize()
+            #endif
         } else if let s = model.sites.first {
             Label { Text(s) } icon: { favicon(s) }.labelStyle(.titleAndIcon).font(.rcHeadline)
         }
