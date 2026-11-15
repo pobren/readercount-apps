@@ -571,6 +571,54 @@ struct DevicesDonut: View {
     }
 }
 
+/// The top few as a ring with each one's share, and the rest as Other. Shown above each breakdown list.
+struct ShareChart: View {
+    let title: String
+    let rows: [(String, Int)]
+    private static let colours: [Color] = [.blue, .purple, .teal, .orange, .pink, .green]
+
+    private var slices: [(name: String, value: Int, colour: Color)] {
+        let top = rows.prefix(6).enumerated().map { ($0.element.0, $0.element.1, Self.colours[$0.offset]) }
+        let rest = rows.dropFirst(6).reduce(0) { $0 + $1.1 }
+        return rest > 0 ? top + [("Other", rest, Color.gray)] : top
+    }
+
+    var body: some View {
+        let parts = slices
+        let total = max(1, parts.reduce(0) { $0 + $1.value })
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: "chart.pie").font(.rcHeadline)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 28) { ring(parts); legend(parts, total).frame(maxWidth: 420) }
+                VStack(alignment: .leading, spacing: 16) { ring(parts).frame(maxWidth: .infinity); legend(parts, total) }
+            }
+        }
+        .card()
+    }
+
+    private func ring(_ parts: [(name: String, value: Int, colour: Color)]) -> some View {
+        Chart(parts, id: \.name) { p in
+            SectorMark(angle: .value("Count", p.value), innerRadius: .ratio(0.6), angularInset: 1.5)
+                .foregroundStyle(p.colour)
+                .cornerRadius(3)
+        }
+        .frame(width: 160, height: 160)
+    }
+
+    private func legend(_ parts: [(name: String, value: Int, colour: Color)], _ total: Int) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(parts, id: \.name) { p in
+                HStack(spacing: 8) {
+                    Circle().fill(p.colour).frame(width: 10, height: 10)
+                    Text(p.name).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 12)
+                    Text("\(Int((100 * Double(p.value) / Double(total)).rounded()))%").bold().monospacedDigit()
+                }
+            }
+        }
+    }
+}
+
 /// A phone, tablet or computer, for the Devices report.
 struct DeviceIcon: View {
     let name: String
@@ -1178,8 +1226,9 @@ struct BreakdownContent: View {
 
     private func label(_ name: String) -> String {
         switch by {
-        case "country": "\(Num.flag(name)) \(name)"
+        case "country": "\(Num.flag(name)) \(Locale.current.localizedString(forRegionCode: name) ?? name)"
         case "town": townCountry[name].map { "\(Num.flag($0)) \(name)" } ?? name
+        case "device": name.capitalized
         default: name
         }
     }
@@ -1188,6 +1237,9 @@ struct BreakdownContent: View {
         VStack(alignment: .leading, spacing: 16) {
             PeriodPicker()
             if let data {
+                if data.rows.count > 1 {
+                    ShareChart(title: clicks ? "Share of clicks" : "Share of visitors", rows: data.rows.map { (label($0.name), $0.count) })
+                }
                 RankList(title: title, icon: icon, rows: data.rows.map { .init(name: label($0.name), value: $0.count, key: $0.name) }, limit: 50, drill: clicks ? nil : by)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
