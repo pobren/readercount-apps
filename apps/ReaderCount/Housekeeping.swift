@@ -28,7 +28,7 @@ struct HousekeepingContent: View {
     @State private var error: String?
     @State private var loading = false
 
-    private func load() async {
+    private func load(fresh: Bool = false) async {
         loading = true
         defer { loading = false }
         if Demo.on {
@@ -40,7 +40,7 @@ struct HousekeepingContent: View {
             return
         }
         do {
-            data = try await API.shared.get(Housekeeping.self, "app/v1/housekeeping", ["site": model.current])
+            data = try await API.shared.get(Housekeeping.self, "app/v1/housekeeping", fresh ? ["site": model.current, "fresh": String(Int(Date.now.timeIntervalSince1970))] : ["site": model.current])
             error = nil
         } catch { self.error = error.localizedDescription }
     }
@@ -53,7 +53,7 @@ struct HousekeepingContent: View {
                     Text("The files search engines, ad networks and AI tools read on your website.").font(.rcCaption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { Task { await load() } } label: { Label("Check again", systemImage: "arrow.clockwise") }
+                Button { Task { await load(fresh: true) } } label: { Label("Check again", systemImage: "arrow.clockwise") }
                     .buttonStyle(.bordered)
                     .disabled(loading)
             }

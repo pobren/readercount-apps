@@ -229,10 +229,13 @@ final class Model {
         do { live = try await API.shared.get(Live.self, "app/v1/live", ["site": current]) } catch { handle(error) }
     }
 
-    func loadHealth() async {
+    /// fresh skips the server's 30 second copy, so a change (such as Mark as fixed) shows at once.
+    func loadHealth(fresh: Bool = false) async {
         if Demo.on { health = Demo.health; return }
         guard !current.isEmpty else { return }
-        do { health = try await API.shared.get(Health.self, "app/v1/health", ["site": current].merging(dates) { _, new in new }) } catch { handle(error) }
+        var q = ["site": current].merging(dates) { _, new in new }
+        if fresh { q["fresh"] = String(Int(Date.now.timeIntervalSince1970 * 1000)) }
+        do { health = try await API.shared.get(Health.self, "app/v1/health", q) } catch { handle(error) }
     }
 
     func breakdown(_ by: String, clicks: Bool = false, filters: [String: String] = [:]) async -> Breakdown? {
@@ -281,7 +284,7 @@ final class Model {
         guard let key = item.key else { return }
         do {
             try await API.shared.send("app/v1/health/fixed", ["site": current, "key": key, "title": item.title, "undo": undo])
-            await loadHealth()
+            await loadHealth(fresh: true)
         } catch { handle(error) }
     }
 
