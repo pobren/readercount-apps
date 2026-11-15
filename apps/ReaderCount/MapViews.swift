@@ -33,6 +33,7 @@ final class PlaceFinder {
     /// Looks up the towns not seen before, one at a time (Apple asks apps not to send many at once).
     func find(_ places: [Place]) async -> Bool {
         var found = false
+        var tries = 0
         for p in places where known[p.key] == nil && !missing.contains(p.key) {
             let query = [p.town, p.region, Locale.current.localizedString(forRegionCode: p.country) ?? p.country].filter { !$0.isEmpty }.joined(separator: ", ")
             do {
@@ -45,7 +46,10 @@ final class PlaceFinder {
             } catch {
                 let code = (error as? CLError)?.code
                 if code == .geocodeFoundNoResult || code == .geocodeFoundPartialResult { missing.insert(p.key); continue }
-                break // Apple is asking us to slow down, or there's no network: try the rest next time.
+                // Apple is asking us to slow down, or there's no network: wait a little and carry on, a few times.
+                tries += 1
+                if tries > 3 { break }
+                try? await Task.sleep(for: .seconds(20))
             }
         }
         if found { UserDefaults.standard.set(known, forKey: "places") }
@@ -73,8 +77,10 @@ struct ReaderMap: View {
 
     /// Opens on the busiest area: the top town and the towns near it, not the whole world.
     private func busiest() -> MapCameraPosition {
+        // Anchor on the top town itself. If it hasn't been found yet, show the whole world rather than
+        // zooming in on whichever smaller town happened to be found first.
         let pts = located
-        guard let first = pts.first?.coord else { return .automatic }
+        guard let top = places.first, let first = PlaceFinder.shared.cached(top) else { return .automatic }
         let near = pts.prefix(15).map(\.coord).filter { abs($0.latitude - first.latitude) < 12 && abs($0.longitude - first.longitude) < 18 }
         let lats = near.map(\.latitude), lons = near.map(\.longitude)
         let span = MKCoordinateSpan(latitudeDelta: max(4, (lats.max()! - lats.min()!) * 1.5), longitudeDelta: max(5, (lons.max()! - lons.min()!) * 1.5))
