@@ -123,6 +123,20 @@ struct SignInView: View {
         }
     }
 
+    @Environment(\.openURL) private var openURL
+
+    private func open(gmail: Bool) {
+        #if os(iOS)
+        let app = URL(string: gmail ? "googlegmail://" : "message://")!
+        openURL(app) { done in if !done && gmail { openURL(URL(string: "https://mail.google.com")!) } }
+        #else
+        if gmail { openURL(URL(string: "https://mail.google.com")!) }
+        else if let mail = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.mail") {
+            NSWorkspace.shared.openApplication(at: mail, configuration: .init())
+        }
+        #endif
+    }
+
     private var codeStep: some View {
         VStack(spacing: 14) {
             Text("We've emailed a six-digit code to \(email). Click Sign in to the app in the email, or type the code here.")
@@ -154,6 +168,14 @@ struct SignInView: View {
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(model.busy || code.filter(\.isNumber).count != 6)
+
+            // Apple only reads codes from its own Mail app. For Gmail, open it here and tap Sign in to the app in the
+            // email, which brings you straight back signed in.
+            HStack(spacing: 10) {
+                Button { open(gmail: true) } label: { Label("Open Gmail", systemImage: "envelope.open") }
+                Button { open(gmail: false) } label: { Label("Open Mail", systemImage: "envelope") }
+            }
+            .buttonStyle(.bordered)
 
             // Apple Mail fills the code in by itself (above the keyboard, or in the field on the Mac). From Gmail or
             // anywhere else, copy the code and paste it here.
