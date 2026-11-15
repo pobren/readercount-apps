@@ -35,11 +35,17 @@ final class PlaceFinder {
         var found = false
         for p in places where known[p.key] == nil && !missing.contains(p.key) {
             let query = [p.town, p.region, Locale.current.localizedString(forRegionCode: p.country) ?? p.country].filter { !$0.isEmpty }.joined(separator: ", ")
-            if let c = try? await geocoder.geocodeAddressString(query).first?.location?.coordinate {
-                known[p.key] = [c.latitude, c.longitude]
-                found = true
-            } else {
-                missing.insert(p.key)
+            do {
+                if let c = try await geocoder.geocodeAddressString(query).first?.location?.coordinate {
+                    known[p.key] = [c.latitude, c.longitude]
+                    found = true
+                } else {
+                    missing.insert(p.key)
+                }
+            } catch {
+                let code = (error as? CLError)?.code
+                if code == .geocodeFoundNoResult || code == .geocodeFoundPartialResult { missing.insert(p.key); continue }
+                break // Apple is asking us to slow down, or there's no network: try the rest next time.
             }
         }
         if found { UserDefaults.standard.set(known, forKey: "places") }
@@ -52,34 +58,59 @@ struct ReaderMap: View {
     var height: CGFloat = 320
     @State private var places: [Place] = []
     @State private var version = 0
+    @State private var camera: MapCameraPosition = .automatic
+    @State private var focus: String?
+
+    struct Located: Identifiable {
+        let place: Place
+        let coord: CLLocationCoordinate2D
+        var id: String { place.key }
+    }
+
+    private var located: [Located] {
+        places.compactMap { p in PlaceFinder.shared.cached(p).map { Located(place: p, coord: $0) } }
+    }
+
+    /// Opens on the busiest area: the top town and the towns near it, not the whole world.
+    private func busiest() -> MapCameraPosition {
+        let pts = located
+        guard let first = pts.first?.coord else { return .automatic }
+        let near = pts.prefix(15).map(\.coord).filter { abs($0.latitude - first.latitude) < 12 && abs($0.longitude - first.longitude) < 18 }
+        let lats = near.map(\.latitude), lons = near.map(\.longitude)
+        let span = MKCoordinateSpan(latitudeDelta: max(4, (lats.max()! - lats.min()!) * 1.5), longitudeDelta: max(5, (lons.max()! - lons.min()!) * 1.5))
+        let centre = CLLocationCoordinate2D(latitude: (lats.max()! + lats.min()!) / 2, longitude: (lons.max()! + lons.min()!) / 2)
+        return .region(MKCoordinateRegion(center: centre, span: span))
+    }
+
+    private func zoom(to p: Place) {
+        guard let c = PlaceFinder.shared.cached(p) else { return }
+        focus = p.key
+        withAnimation { camera = .region(MKCoordinateRegion(center: c, span: MKCoordinateSpan(latitudeDelta: 1.2, longitudeDelta: 1.6))) }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label("Where your readers are", systemImage: "map").font(.rcHeadline)
                 Spacer()
-                if let top = places.first { Text("Most from \(top.town)").font(.rcCaption).foregroundStyle(.secondary) }
+                Button { focus = nil; withAnimation { camera = busiest() } } label: { Label("Busiest area", systemImage: "scope") }
+                    .buttonStyle(.bordered).controlSize(.small)
+                Button { focus = nil; withAnimation { camera = .automatic } } label: { Label("Whole world", systemImage: "globe.europe.africa") }
+                    .buttonStyle(.bordered).controlSize(.small)
             }
+            Text("Each circle is a town your readers came from. The bigger the circle, the more readers. Pick a town to zoom in.")
+                .font(.rcCaption).foregroundStyle(.secondary)
             let top = Double(max(1, places.first?.visitors ?? 1))
-            Map(initialPosition: .automatic, interactionModes: [.zoom, .pan]) {
-                ForEach(places, id: \.key) { p in
-                    if let c = PlaceFinder.shared.cached(p) {
-                        Annotation(p.town, coordinate: c, anchor: .center) {
-                            let size = 12 + 34 * sqrt(Double(p.visitors) / top)
-                            Circle()
-                                .fill(Color.accentColor.opacity(0.35))
-                                .overlay(Circle().stroke(Color.accentColor, lineWidth: 1.5))
-                                .frame(width: size, height: size)
-                                .help("\(p.town): \(p.visitors) visitors")
-                        }
-                        .annotationTitles(.hidden)
-                    }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    map(top).frame(minWidth: 420)
+                    townList.frame(width: 240)
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    map(top)
+                    townList
                 }
             }
-            .mapStyle(.standard(pointsOfInterest: .excludingAll))
-            .id(version)
-            .frame(height: height)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             if places.isEmpty {
                 Text("Towns show here once readers arrive.").font(.rcCallout).foregroundStyle(.secondary)
             }
@@ -88,7 +119,60 @@ struct ReaderMap: View {
         .task(id: model.current + model.datesKey) {
             places = await model.places()
             version += 1
-            if await PlaceFinder.shared.find(Array(places.prefix(40))) { version += 1 }
+            camera = busiest()
+            if await PlaceFinder.shared.find(Array(places.prefix(40))) {
+                version += 1
+                if focus == nil { camera = busiest() }
+            }
+        }
+    }
+
+    private func map(_ top: Double) -> some View {
+        Map(position: $camera, interactionModes: [.zoom, .pan]) {
+            ForEach(located) { item in
+                let p = item.place, c = item.coord
+                Annotation(p.town, coordinate: c, anchor: .center) {
+                    let share = sqrt(Double(p.visitors) / top)
+                    let size = 16 + 38 * share
+                    ZStack {
+                        Circle().fill(Color.orange.opacity(0.25 + 0.5 * share))
+                        Circle().strokeBorder(.white, lineWidth: 1.5)
+                        if size >= 30 { Text(Num.short(p.visitors)).font(.caption2.bold()).foregroundStyle(.white) }
+                    }
+                    .frame(width: size, height: size)
+                    .scaleEffect(focus == p.key ? 1.25 : 1)
+                    .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                    .help("\(p.town): \(p.visitors) visitors")
+                    .onTapGesture { zoom(to: p) }
+                }
+                .annotationTitles(focus == p.key ? .visible : .hidden)
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+        .id(version)
+        .frame(height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var townList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Top towns").font(.rcCaption.bold()).foregroundStyle(.secondary)
+            ForEach(places.prefix(8), id: \.key) { p in
+                Button { zoom(to: p) } label: {
+                    HStack(spacing: 8) {
+                        Text(Num.flag(p.country))
+                        Text(p.town.ifEmpty(p.country)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(Num.short(p.visitors)).monospacedDigit().foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    .font(.rcCallout)
+                    .padding(.vertical, 5).padding(.horizontal, 8)
+                    .background(focus == p.key ? Color.orange.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
