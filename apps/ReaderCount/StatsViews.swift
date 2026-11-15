@@ -367,6 +367,7 @@ struct RankList: View {
     private func line(_ r: Row, top: Int, chevron: Bool) -> some View {
         HStack(spacing: 8) {
             if drill == "source" { SourceIcon(name: r.key ?? r.name) }
+            if drill == "browser" { SourceIcon(name: r.key ?? r.name, browser: true) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.name).lineLimit(1).truncationMode(.middle)
                 if let d = r.detail { Text(d).font(.rcCaption).foregroundStyle(.secondary) }
@@ -573,6 +574,14 @@ struct DevicesDonut: View {
 /// through ReaderCount (app.readercount.com/logo/), so nobody else sees which sites you look at. A letter shows if there's none.
 struct SourceIcon: View {
     let name: String
+    var browser = false
+
+    /// Browsers show the logo of the company that makes them.
+    private static let browsers: [String: String] = [
+        "Safari": "apple.com", "Chrome": "google.com", "Firefox": "firefox.com", "Edge": "microsoft.com", "Opera": "opera.com",
+        "Samsung Internet": "samsung.com", "DuckDuckGo": "duckduckgo.com", "Ecosia": "ecosia.org", "Yandex": "yandex.com",
+        "Facebook": "facebook.com", "Instagram": "instagram.com", "Brave": "brave.com", "Vivaldi": "vivaldi.com", "Arc": "arc.net",
+    ]
 
     private static let hosts: [String: String] = [
         "Google": "google.com", "Google News": "news.google.com", "Bing": "bing.com", "DuckDuckGo": "duckduckgo.com", "Duck.ai": "duckduckgo.com", "duck.ai": "duckduckgo.com",
@@ -584,6 +593,7 @@ struct SourceIcon: View {
     ]
 
     private var host: String? {
+        if browser { return Self.browsers[name] }
         if let h = Self.hosts[name] { return h }
         let plain = name.lowercased().replacingOccurrences(of: "www.", with: "")
         return plain.range(of: #"^[a-z0-9-]+(\.[a-z0-9-]+)+$"#, options: .regularExpression) != nil ? plain : nil
