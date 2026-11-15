@@ -36,8 +36,12 @@ struct MacRoot: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $pane) {
+                // Live sits at the very top with a light: green when readers are on now, grey when nobody is.
+                LiveMenuRow(count: liveHere).tag(MacPane.live)
                 Section("Stats") {
-                    ForEach([MacPane.overview, .live, .trails, .health, .housekeeping]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                    ForEach([MacPane.overview, .trails]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                    HealthMenuRow(light: healthLight).tag(MacPane.health)
+                    Label(MacPane.housekeeping.title, systemImage: MacPane.housekeeping.icon).tag(MacPane.housekeeping)
                 }
                 Section("More") {
                     ForEach([MacPane.google, .sources, .clicks, .countries, .towns, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }
@@ -76,6 +80,16 @@ struct MacRoot: View {
             .id(pane)
         }
         .task { await model.refresh() }
+        .task(id: model.current) { await model.loadHealth() }
+    }
+
+    private var liveHere: Int { model.summary?.sites.first { $0.site == model.current }?.on_site_now ?? 0 }
+
+    /// Red if something needs fixing, amber for warnings, green when all is well (nil before it loads).
+    private var healthLight: Color? {
+        guard let h = model.health, h.site == model.current else { return nil }
+        if h.health.contains(where: { $0.level == "fix" }) { return .red }
+        return h.health.isEmpty ? .green : .orange
     }
 
     @ViewBuilder private var detail: some View {
@@ -90,6 +104,31 @@ struct MacRoot: View {
         }
     }
 
+}
+
+struct LiveMenuRow: View {
+    let count: Int
+    var body: some View {
+        HStack(spacing: 8) {
+            Label("Live", systemImage: MacPane.live.icon)
+            Spacer()
+            Circle().fill(count > 0 ? Color.green : Color.secondary.opacity(0.4)).frame(width: 9, height: 9)
+                .shadow(color: count > 0 ? .green.opacity(0.6) : .clear, radius: 3)
+            Text("\(count)").monospacedDigit().font(.rcCallout.bold()).foregroundStyle(count > 0 ? .primary : .secondary)
+        }
+        .accessibilityLabel("Live, \(count) reading now")
+    }
+}
+
+struct HealthMenuRow: View {
+    let light: Color?
+    var body: some View {
+        HStack(spacing: 8) {
+            Label(MacPane.health.title, systemImage: MacPane.health.icon)
+            Spacer()
+            if let light { Circle().fill(light).frame(width: 9, height: 9) }
+        }
+    }
 }
 
 struct CSVFile: FileDocument {
