@@ -47,8 +47,10 @@ struct SitePicker: View {
                 }
             }
             .pickerStyle(.menu)
+            .labelStyle(.titleAndIcon)
+            .fixedSize()
         } else if let s = model.sites.first {
-            Label { Text(s) } icon: { favicon(s) }.font(.rcHeadline)
+            Label { Text(s) } icon: { favicon(s) }.labelStyle(.titleAndIcon).font(.rcHeadline)
         }
     }
 
@@ -750,10 +752,52 @@ struct TrailsContent: View {
 /// One visitor's trail: where they're from, how they arrived, and every step with its time.
 struct TrailCard: View {
     let v: LiveVisitor
+    @State private var showAll = false
+
+    /// One line per page visit: refreshes and repeat views of the same page in a row are folded together.
+    struct Stop: Hashable {
+        let kind: String
+        let label: String
+        let first: Double
+        var last: Double
+        var seconds: Double
+        var times: Int
+    }
+
+    private var stops: [Stop] {
+        var out: [Stop] = []
+        for s in v.steps {
+            let label = s.kind == "view" ? s.path : (s.target ?? s.path)
+            if var prev = out.last, prev.kind == s.kind, prev.label == label {
+                prev.last = s.ts; prev.seconds += s.seconds; prev.times += 1
+                out[out.count - 1] = prev
+            } else {
+                out.append(Stop(kind: s.kind, label: label, first: s.ts, last: s.ts, seconds: s.seconds, times: 1))
+            }
+        }
+        return out
+    }
 
     private func time(_ ms: Double) -> String { Date(timeIntervalSince1970: ms / 1000).formatted(date: .omitted, time: .shortened) }
 
+    private func detail(_ s: Stop) -> String {
+        var parts: [String] = []
+        let a = time(s.first), b = time(s.last)
+        parts.append(a == b ? a : "\(a) to \(b)")
+        if s.times > 1 { parts.append(s.kind == "view" ? "opened \(s.times) times" : "\(s.times) clicks") }
+        if s.seconds > 0 { parts.append("read for \(Num.time(Int(s.seconds)))") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var summary: String {
+        let pages = Set(v.steps.filter { $0.kind == "view" }.map(\.path)).count
+        let p = "\(pages) page\(pages == 1 ? "" : "s")"
+        return v.views > pages ? "\(p), \(v.views) views" : p
+    }
+
     var body: some View {
+        let all = stops
+        let shown = showAll || all.count <= 8 ? all : Array(all.prefix(6))
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Text(Num.flag(v.country)).font(.rcTitle3)
@@ -767,27 +811,35 @@ struct TrailCard: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("\(time(v.first)) to \(time(v.last))").font(.rcCaption.bold()).monospacedDigit()
-                    Text("\(v.views) page\(v.views == 1 ? "" : "s")").font(.rcCaption).foregroundStyle(.secondary)
+                    Text(summary).font(.rcCaption).foregroundStyle(.secondary)
                 }
             }
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(v.steps.enumerated()), id: \.offset) { item in
+                ForEach(Array(shown.enumerated()), id: \.offset) { item in
                     let s = item.element
                     HStack(alignment: .top, spacing: 10) {
                         VStack(spacing: 0) {
                             Circle().fill(s.kind == "view" ? Color.accentColor : Color.orange).frame(width: 9, height: 9).padding(.top, 5)
-                            if item.offset < v.steps.count - 1 { Rectangle().fill(.quaternary).frame(width: 2).frame(maxHeight: .infinity) }
+                            if item.offset < shown.count - 1 { Rectangle().fill(.quaternary).frame(width: 2).frame(maxHeight: .infinity) }
                         }
                         .frame(width: 10)
                         VStack(alignment: .leading, spacing: 1) {
-                            Label(s.kind == "view" ? s.path : (s.target ?? s.path), systemImage: s.kind == "view" ? "doc.text" : (s.kind == "goal" ? "target" : "arrow.up.right.square"))
+                            Label(s.label == "/" && s.kind == "view" ? "Home page" : s.label, systemImage: s.kind == "view" ? "doc.text" : (s.kind == "goal" ? "target" : "arrow.up.right.square"))
                                 .font(.rcCallout).lineLimit(1).truncationMode(.middle)
-                            Text(time(s.ts) + (s.seconds > 0 ? " · read for \(Num.time(Int(s.seconds)))" : ""))
-                                .font(.rcCaption).foregroundStyle(.secondary)
+                            Text(detail(s)).font(.rcCaption).foregroundStyle(.secondary)
                         }
                         .padding(.bottom, 8)
                     }
                 }
+            }
+            if all.count > shown.count || showAll && all.count > 8 {
+                Button {
+                    withAnimation { showAll.toggle() }
+                } label: {
+                    Label(showAll ? "Show less" : "Show all \(all.count) steps", systemImage: showAll ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .font(.rcCaption.bold())
             }
         }
         .card()
