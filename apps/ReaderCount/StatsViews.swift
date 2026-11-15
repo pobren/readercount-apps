@@ -368,6 +368,7 @@ struct RankList: View {
         HStack(spacing: 8) {
             if drill == "source" { SourceIcon(name: r.key ?? r.name) }
             if drill == "browser" { SourceIcon(name: r.key ?? r.name, browser: true) }
+            if drill == "device" { DeviceIcon(name: r.key ?? r.name) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(r.name).lineLimit(1).truncationMode(.middle)
                 if let d = r.detail { Text(d).font(.rcCaption).foregroundStyle(.secondary) }
@@ -567,6 +568,20 @@ struct DevicesDonut: View {
             }
         }
         .card()
+    }
+}
+
+/// A phone, tablet or computer, for the Devices report.
+struct DeviceIcon: View {
+    let name: String
+    var body: some View {
+        let symbol = switch name.lowercased() {
+        case "mobile": "iphone"
+        case "tablet": "ipad"
+        case "desktop": "desktopcomputer"
+        default: "questionmark.square.dashed"
+        }
+        Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(.tint).frame(width: 20, height: 20).accessibilityHidden(true)
     }
 }
 
@@ -1158,17 +1173,34 @@ struct BreakdownContent: View {
     let by: String
     var clicks = false
     @State private var data: Breakdown?
+    /// Each town's country, so towns show a flag like countries do.
+    @State private var townCountry: [String: String] = [:]
+
+    private func label(_ name: String) -> String {
+        switch by {
+        case "country": "\(Num.flag(name)) \(name)"
+        case "town": townCountry[name].map { "\(Num.flag($0)) \(name)" } ?? name
+        default: name
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PeriodPicker()
             if let data {
-                RankList(title: title, icon: icon, rows: data.rows.map { .init(name: by == "country" ? "\(Num.flag($0.name)) \($0.name)" : $0.name, value: $0.count, key: $0.name) }, limit: 50, drill: clicks ? nil : by)
+                RankList(title: title, icon: icon, rows: data.rows.map { .init(name: label($0.name), value: $0.count, key: $0.name) }, limit: 50, drill: clicks ? nil : by)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             }
         }
-        .task(id: model.current + model.datesKey + by) { data = await model.breakdown(by, clicks: clicks) }
+        .task(id: model.current + model.datesKey + by) {
+            data = await model.breakdown(by, clicks: clicks)
+            if by == "town" && !clicks {
+                var map: [String: String] = [:]
+                for p in await model.places() where map[p.town] == nil { map[p.town] = p.country }
+                townCountry = map
+            }
+        }
     }
 }
 
