@@ -16,6 +16,11 @@ enum Keychain {
     }
 
     static func save(_ account: String, _ value: String) {
+        // Change it in place where it's already there, so the widget never catches a moment with no sign in.
+        for shared in [true, false] {
+            let change: [String: Any] = [kSecValueData as String: Data(value.utf8)]
+            if SecItemUpdate(query(account, shared: shared) as CFDictionary, change as CFDictionary) == errSecSuccess { return }
+        }
         delete(account)
         for shared in [true, false] {
             var q = query(account, shared: shared)

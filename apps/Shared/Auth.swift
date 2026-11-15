@@ -155,25 +155,48 @@ actor API {
         var c = URLComponents()
         c.queryItems = form.map { URLQueryItem(name: $0.key, value: $0.value) }
         r.httpBody = c.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B").data(using: .utf8)
-        let (data, response) = try await session.data(for: r)
-        guard (response as? HTTPURLResponse)?.statusCode == 200,
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await session.data(for: r)
+        } catch {
+            if (error as? URLError)?.code == .cancelled || error is CancellationError { throw CancellationError() }
+            throw APIError(message: "We couldn't reach ReaderCount. Check you're online and try again.", status: 0)
+        }
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        // Only a definite "that token isn't valid" signs the person out; a busy server or a bad connection doesn't.
+        guard status == 200,
               let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let access = j["access_token"] as? String, let refresh = j["refresh_token"] as? String else {
-            throw APIError(message: "Please sign in to ReaderCount again.", status: 401)
+            if status == 400 || status == 401 { throw APIError(message: "Please sign in to ReaderCount again.", status: 401) }
+            throw APIError(message: "ReaderCount is busy just now. Please try again in a moment.", status: status)
         }
         let seconds = (j["expires_in"] as? Double) ?? 3600
         Tokens(access: access, refresh: refresh, expires: Date().addingTimeInterval(seconds - 60)).save()
     }
 
+    /// The refresh under way, so requests made at the same moment share it instead of each spending the token.
+    private var refreshing: Task<String, Error>?
+
     /// A working access token, refreshed when it has run out.
     private func accessToken() async throws -> String {
         guard let t = Tokens.load() else { throw APIError(message: "Please sign in.", status: 401) }
         if t.expires > Date() { return t.access }
+        if let refreshing { return try await refreshing.value }
+        let task = Task { try await refresh(t) }
+        refreshing = task
+        defer { refreshing = nil }
+        return try await task.value
+    }
+
+    private func refresh(_ t: Tokens) async throws -> String {
         do {
             try await tokenRequest(["grant_type": "refresh_token", "refresh_token": t.refresh, "client_id": Shared.clientID])
         } catch {
-            // The widget or the app may have just refreshed with the same token: use what it saved.
-            if let now = Tokens.load(), now != t, now.expires > Date() { return now.access }
+            // The widget or the menu bar may have refreshed with the same token a moment ago: use what it saved.
+            for _ in 0..<3 {
+                if let now = Tokens.load(), now != t, now.expires > Date() { return now.access }
+                try? await Task.sleep(for: .seconds(1))
+            }
             throw error
         }
         return Tokens.load()?.access ?? ""
