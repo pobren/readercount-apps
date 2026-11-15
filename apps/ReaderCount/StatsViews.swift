@@ -514,13 +514,6 @@ struct AccountSections: View {
             Text("Your websites")
         }
         Section {
-            AlertsSettings()
-        } header: {
-            Text("Alerts on this device")
-        } footer: {
-            Text("Alerts come as a notification on this device, as well as any emails you've chosen on the website.")
-        }
-        Section {
             Link(destination: Shared.app) { Label("Manage your account on the website", systemImage: "person.badge.key") }
         } footer: {
             Text("Adding websites, your plan, team logins, earnings and API keys are on the website.")
@@ -1197,10 +1190,11 @@ struct SearchesContent: View {
 
 /// The More list: each breakdown the website has, opened on its own screen.
 enum MoreItem: String, CaseIterable, Identifiable {
-    case trails, google, sources, clicks, countries, towns, devices, browsers, campaigns
+    case alerts, trails, google, sources, clicks, countries, towns, devices, browsers, campaigns
     var id: String { rawValue }
     var title: String {
         switch self {
+        case .alerts: "Alerts"
         case .trails: "Visitor trails"
         case .google: "Google search"
         case .sources: "Sources"
@@ -1214,6 +1208,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
+        case .alerts: "bell.badge"
         case .trails: "point.topleft.down.to.point.bottomright.curvepath"
         case .google: "magnifyingglass"
         case .sources: "arrow.down.right.circle"
@@ -1228,6 +1223,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
 
     @ViewBuilder var content: some View {
         switch self {
+        case .alerts: AlertsContent()
         case .trails: TrailsContent()
         case .google: SearchesContent()
         case .sources: BreakdownContent(title: title, icon: icon, by: "source")
@@ -1247,6 +1243,7 @@ struct AlertsSettings: View {
     static let kinds: [(String, String, String)] = [
         ("spike", "Traffic spikes", "chart.line.uptrend.xyaxis"),
         ("down", "Website down", "exclamationmark.icloud"),
+        ("links", "Broken links", "link"),
         ("triggers", "Goals and triggers", "target"),
         ("monthly", "Monthly review", "calendar"),
     ]
