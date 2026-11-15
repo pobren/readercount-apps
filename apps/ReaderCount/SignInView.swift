@@ -2,6 +2,9 @@
 // No password and no browser window. Accounts are made on the website.
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct SignInView: View {
     @Environment(Model.self) private var model
@@ -9,6 +12,7 @@ struct SignInView: View {
     @State private var code = ""
     @State private var codeSent = false
     @FocusState private var focus: Field?
+    @Environment(\.scenePhase) private var phase
 
     private enum Field { case email, code }
 
@@ -52,6 +56,29 @@ struct SignInView: View {
             .frame(maxWidth: .infinity)
         }
         .onAppear { focus = .email }
+        .onChange(of: model.codeLink) { _, link in
+            guard let link else { return }
+            if !link.email.isEmpty { email = link.email }
+            code = link.code
+            codeSent = true
+            model.codeLink = nil
+            Task { await finish() }
+        }
+        // Apple Mail's code AutoFill is offered when the box gains focus, so coming back from Mail gives it a fresh focus.
+        .onChange(of: phase) { _, now in if now == .active { refocus() } }
+        #if os(macOS)
+        // On the Mac the window stays "active" while you look at Mail, so listen for the app itself coming back.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refocus() }
+        #endif
+    }
+
+    private func refocus() {
+        guard codeSent, code.isEmpty else { return }
+        focus = nil
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            focus = .code
+        }
     }
 
     private var emailStep: some View {
@@ -98,7 +125,7 @@ struct SignInView: View {
 
     private var codeStep: some View {
         VStack(spacing: 14) {
-            Text("We've emailed a six-digit code to \(email). Type it here.")
+            Text("We've emailed a six-digit code to \(email). Click Sign in to the app in the email, or type the code here.")
                 .font(.rcCallout).multilineTextAlignment(.center)
 
             TextField("Six-digit code", text: $code)
@@ -130,12 +157,15 @@ struct SignInView: View {
 
             // Apple Mail fills the code in by itself (above the keyboard, or in the field on the Mac). From Gmail or
             // anywhere else, copy the code and paste it here.
-            PasteButton(payloadType: String.self) { strings in
-                let digits = (strings.first ?? "").components(separatedBy: CharacterSet.decimalDigits.inverted).first { $0.count == 6 } ?? ""
-                Task { @MainActor in if !digits.isEmpty { code = digits } }
+            HStack(spacing: 10) {
+                Text("Copied the code from your email?").font(.rcCaption).foregroundStyle(.secondary)
+                PasteButton(payloadType: String.self) { strings in
+                    let digits = (strings.first ?? "").components(separatedBy: CharacterSet.decimalDigits.inverted).first { $0.count == 6 } ?? ""
+                    Task { @MainActor in if !digits.isEmpty { code = digits } }
+                }
+                .buttonBorderShape(.capsule)
+                .labelStyle(.titleAndIcon)
             }
-            .buttonBorderShape(.capsule)
-            .labelStyle(.titleAndIcon)
 
             HStack(spacing: 20) {
                 Button {

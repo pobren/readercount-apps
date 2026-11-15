@@ -13,6 +13,7 @@
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>webcredentials:app.readercount.com</string>
+		<string>applinks:app.readercount.com</string>
 	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>

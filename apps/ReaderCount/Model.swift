@@ -61,6 +61,19 @@ final class Model {
     var health: Health?
     var error: String?
     var busy = false
+    /// A sign-in code from the link in the code email, for the sign in screen to use.
+    var codeLink: CodeLink?
+
+    struct CodeLink: Equatable { let email: String; let code: String }
+
+    func openLink(_ url: URL) {
+        let q = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let isCode = (url.scheme == "readercount" && url.host == "code") || url.path == "/app/open/code"
+        guard isCode, !signedIn else { return }
+        let code = (q.first { $0.name == "c" }?.value ?? "").filter(\.isNumber)
+        let email = q.first { $0.name == "e" }?.value ?? ""
+        if code.count == 6 { codeLink = CodeLink(email: email, code: code) }
+    }
     /// Push alerts: what the person allowed in Settings, and which alerts this device gets.
     var pushAllowed: Bool?
     var alerts: [String: Bool] = (Shared.defaults.dictionary(forKey: "alerts") as? [String: Bool]) ?? ["spike": true, "down": true, "triggers": true, "monthly": true]

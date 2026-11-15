@@ -18,6 +18,10 @@ struct ReaderCountApp: App {
         WindowGroup(id: "main") {
             RootView()
                 .environment(model)
+                // "Sign in to the app" in the code email: https://app.readercount.com/app/open/code?c=…&e=…
+                // (or readercount://code?c=…&e=… from the page there).
+                .onOpenURL { model.openLink($0) }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { a in if let u = a.webpageURL { model.openLink(u) } }
                 #if os(macOS)
                 .frame(minWidth: model.signedIn ? 900 : 420, minHeight: model.signedIn ? 620 : 520)
                 #endif
