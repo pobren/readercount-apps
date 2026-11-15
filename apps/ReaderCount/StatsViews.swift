@@ -1190,11 +1190,12 @@ struct SearchesContent: View {
 
 /// The More list: each breakdown the website has, opened on its own screen.
 enum MoreItem: String, CaseIterable, Identifiable {
-    case alerts, trails, google, sources, clicks, countries, towns, devices, browsers, campaigns
+    case alerts, housekeeping, trails, google, sources, clicks, countries, towns, devices, browsers, campaigns
     var id: String { rawValue }
     var title: String {
         switch self {
         case .alerts: "Alerts"
+        case .housekeeping: "Housekeeping"
         case .trails: "Visitor trails"
         case .google: "Google search"
         case .sources: "Sources"
@@ -1209,6 +1210,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .alerts: "bell.badge"
+        case .housekeeping: "checklist"
         case .trails: "point.topleft.down.to.point.bottomright.curvepath"
         case .google: "magnifyingglass"
         case .sources: "arrow.down.right.circle"
@@ -1224,6 +1226,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
     @ViewBuilder var content: some View {
         switch self {
         case .alerts: AlertsContent()
+        case .housekeeping: HousekeepingContent()
         case .trails: TrailsContent()
         case .google: SearchesContent()
         case .sources: BreakdownContent(title: title, icon: icon, by: "source")
