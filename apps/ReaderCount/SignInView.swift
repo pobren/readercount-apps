@@ -13,6 +13,7 @@ struct SignInView: View {
     @State private var codeSent = false
     @FocusState private var focus: Field?
     @Environment(\.scenePhase) private var phase
+    @State private var wentAway = false
 
     private enum Field { case email, code }
 
@@ -65,7 +66,12 @@ struct SignInView: View {
             Task { await finish() }
         }
         // Apple Mail's code AutoFill is offered when the box gains focus, so coming back from Mail gives it a fresh focus.
-        .onChange(of: phase) { _, now in if now == .active { refocus() } }
+        // Only after really leaving the app (to Mail): tapping the code above the keyboard also makes the app
+        // briefly inactive, and moving focus then threw the code away before it reached the box.
+        .onChange(of: phase) { _, now in
+            if now == .background { wentAway = true }
+            if now == .active, wentAway { wentAway = false; refocus() }
+        }
         #if os(macOS)
         // On the Mac the window stays "active" while you look at Mail, so listen for the app itself coming back.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refocus() }
