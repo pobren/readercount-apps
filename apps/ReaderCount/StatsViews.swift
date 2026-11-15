@@ -402,12 +402,42 @@ struct ShareReportButton: View {
         #endif
     }
 
+    @State private var saving = false
+
+    /// The overview's days, pages and sources as a spreadsheet.
+    private var sheet: CSVExport {
+        func q(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+        var lines = ["\(q("Website")),\(q(o.site))", "\(q("From")),\(o.from)", "\(q("To")),\(o.to)", "", "Day,Visitors,Page views"]
+        lines += o.per_day.map { "\($0.day)\($0.hour.map { " \($0):00" } ?? ""),\($0.visitors),\($0.views)" }
+        lines += ["", "Page,Visitors,Page views,Time on page (seconds)"]
+        lines += o.top_pages.map { "\(q($0.page)),\($0.visitors),\($0.views),\($0.avg_seconds ?? 0)" }
+        lines += ["", "Source,Visitors"]
+        lines += o.sources.map { "\(q($0.source)),\($0.visitors)" }
+        return CSVExport(name: "\(o.site) \(o.from) to \(o.to).csv", text: lines.joined(separator: "\n") + "\n")
+    }
+
     var body: some View {
         let name = "\(o.site) \(o.from) to \(o.to)"
-        ShareLink(item: picture, subject: Text(name), message: Text("\(o.site): \(o.totals.visitors.formatted()) visitors and \(o.totals.views.formatted()) page views, \(o.from) to \(o.to). From ReaderCount."), preview: SharePreview(name, image: picture)) {
+        let file = sheet
+        Menu {
+            ShareLink(item: picture, subject: Text(name), message: Text("\(o.site): \(o.totals.visitors.formatted()) visitors and \(o.totals.views.formatted()) page views, \(o.from) to \(o.to). From ReaderCount."), preview: SharePreview(name, image: picture)) {
+                Label("Share as a picture", systemImage: "photo")
+            }
+            ShareLink(item: file, preview: SharePreview(file.name)) {
+                Label("Share as a spreadsheet", systemImage: "tablecells")
+            }
+            #if os(macOS)
+            Button { saving = true } label: { Label("Save as a spreadsheet", systemImage: "square.and.arrow.down") }
+            #endif
+        } label: {
             Label("Share report", systemImage: "square.and.arrow.up")
         }
+        .menuStyle(.button)
         .buttonStyle(.bordered)
+        .fixedSize()
+        #if os(macOS)
+        .fileExporter(isPresented: $saving, item: file, contentTypes: [.commaSeparatedText], defaultFilename: file.name) { _ in }
+        #endif
     }
 }
 

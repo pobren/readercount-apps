@@ -32,7 +32,6 @@ enum MacPane: String, CaseIterable, Identifiable, Hashable {
 struct MacRoot: View {
     @Environment(Model.self) private var model
     @State private var pane: MacPane? = Demo.tab.flatMap { MacPane(rawValue: $0 == "today" ? "overview" : $0) } ?? .overview
-    @State private var exporting = false
 
     var body: some View {
         NavigationSplitView {
@@ -64,16 +63,6 @@ struct MacRoot: View {
             .navigationTitle(pane?.title ?? "ReaderCount")
             .toolbar {
                 ToolbarItem { SitePicker() }
-                if pane == .overview {
-                    ToolbarItem {
-                        Button {
-                            exporting = true
-                        } label: {
-                            Label("Export to CSV", systemImage: "square.and.arrow.down")
-                        }
-                        .disabled(model.overview == nil)
-                    }
-                }
                 ToolbarItem {
                     Button {
                         Task { await model.refresh(); await model.loadLive(); await model.loadHealth() }
@@ -86,7 +75,6 @@ struct MacRoot: View {
             }
             .id(pane)
         }
-        .fileExporter(isPresented: $exporting, document: CSVFile(text: csv()), contentType: .commaSeparatedText, defaultFilename: "\(model.current) \(model.period.label).csv") { _ in }
         .task { await model.refresh() }
     }
 
@@ -102,18 +90,6 @@ struct MacRoot: View {
         }
     }
 
-    /// The overview's pages and sources as a spreadsheet.
-    private func csv() -> String {
-        guard let o = model.overview else { return "" }
-        func q(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
-        var lines = ["\(q("Website")),\(q(o.site))", "\(q("From")),\(o.from)", "\(q("To")),\(o.to)", "", "Day,Visitors,Page views"]
-        lines += o.per_day.map { "\($0.day)\($0.hour.map { " \($0):00" } ?? ""),\($0.visitors),\($0.views)" }
-        lines += ["", "Page,Visitors,Page views,Time on page (seconds)"]
-        lines += o.top_pages.map { "\(q($0.page)),\($0.visitors),\($0.views),\($0.avg_seconds ?? 0)" }
-        lines += ["", "Source,Visitors"]
-        lines += o.sources.map { "\(q($0.source)),\($0.visitors)" }
-        return lines.joined(separator: "\n") + "\n"
-    }
 }
 
 struct CSVFile: FileDocument {
