@@ -81,22 +81,98 @@ struct PeriodPicker: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Picker("Dates", selection: $model.period) {
                 ForEach(Period.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
-            if model.period == .custom {
-                HStack(spacing: 12) {
-                    Image(systemName: "calendar").foregroundStyle(.secondary)
-                    DatePicker("From", selection: $model.customFrom, in: ...model.customTo, displayedComponents: .date)
-                    DatePicker("To", selection: $model.customTo, in: model.customFrom...Date.now, displayedComponents: .date)
-                    Spacer(minLength: 0)
+            if model.period == .custom { CustomRange() }
+        }
+    }
+}
+
+/// The custom dates box: a clear summary, two big date buttons that open a calendar, and quick picks.
+struct CustomRange: View {
+    @Environment(Model.self) private var model
+    @State private var editing: Which?
+    enum Which: String, Identifiable { case from, to; var id: String { rawValue } }
+
+    private var days: Int {
+        let c = Calendar.current
+        return (c.dateComponents([.day], from: c.startOfDay(for: model.customFrom), to: c.startOfDay(for: model.customTo)).day ?? 0) + 1
+    }
+
+    private func set(_ from: Date, _ to: Date) {
+        model.customFrom = from
+        model.customTo = min(to, .now)
+    }
+
+    var body: some View {
+        @Bindable var model = model
+        VStack(alignment: .leading, spacing: 12) {
+            Label("\(model.customFrom.formatted(date: .abbreviated, time: .omitted)) to \(model.customTo.formatted(date: .abbreviated, time: .omitted)) · \(days) day\(days == 1 ? "" : "s")", systemImage: "calendar")
+                .font(.rcHeadline)
+            HStack(spacing: 12) {
+                dateButton("From", model.customFrom, .from)
+                Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                dateButton("To", model.customTo, .to)
+            }
+            HStack(spacing: 8) {
+                quick("This month", "calendar.badge.clock") {
+                    let c = Calendar.current
+                    set(c.date(from: c.dateComponents([.year, .month], from: .now)) ?? .now, .now)
                 }
-                .datePickerStyle(.compact)
-                .font(.rcCallout)
+                quick("Last month", "calendar.badge.minus") {
+                    let c = Calendar.current
+                    let start = c.date(from: c.dateComponents([.year, .month], from: .now)) ?? .now
+                    let prev = c.date(byAdding: .month, value: -1, to: start) ?? start
+                    set(prev, c.date(byAdding: .day, value: -1, to: start) ?? start)
+                }
+                quick("Last 90 days", "calendar") {
+                    set(Calendar.current.date(byAdding: .day, value: -89, to: .now) ?? .now, .now)
+                }
             }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.accentColor.opacity(0.35)))
+    }
+
+    private func dateButton(_ title: String, _ date: Date, _ which: Which) -> some View {
+        Button { editing = which } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.rcCaption).foregroundStyle(.secondary)
+                Label(date.formatted(date: .long, time: .omitted), systemImage: "calendar").font(.rcBody.bold())
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .frame(minWidth: 180, alignment: .leading)
+            .background(.background, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(item: Binding(get: { editing == which ? which : nil }, set: { editing = $0 })) { w in
+            @Bindable var model = model
+            Group {
+                if w == .from {
+                    DatePicker(title, selection: $model.customFrom, in: ...model.customTo, displayedComponents: .date)
+                } else {
+                    DatePicker(title, selection: $model.customTo, in: model.customFrom...Date.now, displayedComponents: .date)
+                }
+            }
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            .padding()
+            .frame(minWidth: 300)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+
+    private func quick(_ title: String, _ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) { Label(title, systemImage: icon) }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
     }
 }
 
