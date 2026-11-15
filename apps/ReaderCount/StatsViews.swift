@@ -369,8 +369,11 @@ struct RankList: View {
             if drill == "source" { SourceIcon(name: r.key ?? r.name) }
             if drill == "browser" { SourceIcon(name: r.key ?? r.name, browser: true) }
             if drill == "device" { DeviceIcon(name: r.key ?? r.name) }
+            let link = r.name.hasPrefix("http") ? URL(string: r.name) : nil
+            if let host = link?.host() { SourceIcon(name: host) }
             VStack(alignment: .leading, spacing: 2) {
-                Text(r.name).lineLimit(1).truncationMode(.middle)
+                Text(link == nil ? r.name : r.name.replacingOccurrences(of: #"^https?://(www\.)?"#, with: "", options: .regularExpression))
+                    .lineLimit(1).truncationMode(.middle)
                 if let d = r.detail { Text(d).font(.rcCaption).foregroundStyle(.secondary) }
             }
             Spacer()
