@@ -117,11 +117,39 @@ struct Live: Codable {
 }
 
 struct Trails: Codable {
+    struct Hour: Codable, Hashable { let hour: Int; let n: Int }
+    struct Choice: Codable, Hashable { let name: String; let n: Int }
+    struct Choices: Codable, Hashable { let source: [Choice]; let country: [Choice]; let device: [Choice]; let page: [Choice] }
+    struct Journey: Codable, Hashable { let steps: [String]; let n: Int }
     let site: String
     let day: String
     let page: Int
     let total: Int
     let visitors: [LiveVisitor]
+    /// Visitors by the hour (UTC) they arrived, what the filters can pick from, and the routes taken most.
+    var hours: [Hour]? = nil
+    var choices: Choices? = nil
+    var journeys: [Journey]? = nil
+}
+
+/// Narrowing a day's visitor trails.
+struct TrailFilter: Hashable {
+    var source = ""
+    var country = ""
+    var device = ""
+    var path = ""
+    var deep = false
+    var isEmpty: Bool { source.isEmpty && country.isEmpty && device.isEmpty && path.isEmpty && !deep }
+    var query: [String: String] {
+        var q: [String: String] = ["filters": "1"]
+        if !source.isEmpty { q["source"] = source }
+        if !country.isEmpty { q["country"] = country }
+        if !device.isEmpty { q["device"] = device }
+        if !path.isEmpty { q["path"] = path }
+        if deep { q["min"] = "2" }
+        return q
+    }
+    var key: String { "\(source)|\(country)|\(device)|\(path)|\(deep)" }
 }
 
 struct Health: Codable {

@@ -891,7 +891,8 @@ struct LiveContent: View {
     }
 }
 
-/// Visitor trails: every visitor on one day, newest first, with each page they read and link they clicked.
+/// Visitor trails: every visitor on one day, newest first. Built for busy sites: the routes readers take most, filters,
+/// the day split by hour, and one line per visitor that opens their full trail.
 struct TrailsContent: View {
     @Environment(Model.self) private var model
     @State private var day = Date.now
@@ -899,6 +900,10 @@ struct TrailsContent: View {
     @State private var visitors: [LiveVisitor] = []
     @State private var page = 1
     @State private var loading = false
+    @State private var filter = TrailFilter()
+    /// Hours opened or closed by hand (the newest hour starts open, the rest folded).
+    @State private var toggled: Set<Int> = []
+    @State private var open: Set<String> = []
 
     private static let iso: DateFormatter = {
         let f = DateFormatter()
@@ -907,6 +912,17 @@ struct TrailsContent: View {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    private static let utc: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_GB_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    private var dayKey: String { Self.iso.string(from: day) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -922,29 +938,78 @@ struct TrailsContent: View {
                 Spacer()
                 if let t = trails { Text("\(t.total.formatted()) visitor\(t.total == 1 ? "" : "s")").font(.rcHeadline).foregroundStyle(.secondary) }
             }
+            TrailFilterBar(filter: $filter, choices: trails?.choices)
             if trails == nil {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
             } else if visitors.isEmpty {
-                ContentUnavailableView("No visitors on this day", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                ContentUnavailableView(filter.isEmpty ? "No visitors on this day" : "Nobody matches these filters", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
             } else {
-                ForEach(Array(visitors.enumerated()), id: \.offset) { item in TrailCard(v: item.element) }
+                if let j = trails?.journeys, !j.isEmpty {
+                    JourneysCard(journeys: j) { last in filter.path = last }
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    let groups = byHour
+                    ForEach(Array(groups.enumerated()), id: \.offset) { item in
+                        let g = item.element
+                        let isOpen = (item.offset == 0) != toggled.contains(g.hour)
+                        Button {
+                            withAnimation { if toggled.contains(g.hour) { toggled.remove(g.hour) } else { toggled.insert(g.hour) } }
+                        } label: {
+                            HStack {
+                                Image(systemName: isOpen ? "chevron.down" : "chevron.right").font(.rcCaption.bold()).frame(width: 14)
+                                Text(String(format: "%02d:00", g.hour)).font(.rcHeadline).monospacedDigit()
+                                Text("· \(g.total.formatted()) visitor\(g.total == 1 ? "" : "s")").foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if isOpen {
+                            ForEach(g.visitors, id: \.self) { v in
+                                let id = "\(v.first)\(v.country)\(v.town)\(v.page)"
+                                TrailLine(v: v, expanded: open.contains(id)) {
+                                    withAnimation { if open.contains(id) { open.remove(id) } else { open.insert(id) } }
+                                }
+                                Divider()
+                            }
+                        }
+                        if item.offset < groups.count - 1 { Divider() }
+                    }
+                }
+                .card()
                 if let t = trails, visitors.count < t.total {
                     Button {
                         Task { await more() }
                     } label: {
-                        if loading { ProgressView().frame(maxWidth: .infinity) } else { Label("Show more visitors", systemImage: "arrow.down.circle").frame(maxWidth: .infinity) }
+                        if loading { ProgressView().frame(maxWidth: .infinity) } else { Label("Show older visitors", systemImage: "arrow.down.circle").frame(maxWidth: .infinity) }
                     }
                     .buttonStyle(.bordered).controlSize(.large).disabled(loading)
                 }
             }
         }
-        .task(id: model.current + Self.iso.string(from: day)) {
+        .task(id: model.current + dayKey + filter.key) {
             trails = nil
             visitors = []
             page = 1
-            trails = await model.trails(day: Self.iso.string(from: day))
+            toggled = []
+            open = []
+            trails = await model.trails(day: dayKey, filter: filter)
             visitors = trails?.visitors ?? []
         }
+    }
+
+    /// The loaded visitors by the hour they arrived (your time), newest hour first, with the day's count for each hour.
+    private var byHour: [(hour: Int, total: Int, visitors: [LiveVisitor])] {
+        let cal = Calendar.current
+        var groups: [Int: [LiveVisitor]] = [:]
+        for v in visitors { groups[cal.component(.hour, from: Date(timeIntervalSince1970: v.first / 1000)), default: []].append(v) }
+        // The server counts by UTC hour; turn each into your hour for that day.
+        var counts: [Int: Int] = [:]
+        if let midnight = Self.utc.date(from: trails?.day ?? dayKey) {
+            for h in trails?.hours ?? [] { counts[cal.component(.hour, from: midnight.addingTimeInterval(Double(h.hour) * 3600)), default: 0] += h.n }
+        }
+        return groups.keys.sorted(by: >).map { h in (h, max(counts[h] ?? 0, groups[h]!.count), groups[h]!) }
     }
 
     private func shift(_ by: Int) {
@@ -954,9 +1019,140 @@ struct TrailsContent: View {
     private func more() async {
         loading = true
         defer { loading = false }
-        if let next = await model.trails(day: Self.iso.string(from: day), page: page + 1) {
+        if let next = await model.trails(day: dayKey, page: page + 1, filter: filter) {
             page += 1
             visitors += next.visitors
+        }
+    }
+}
+
+/// Source, country, device and page menus, a "2 or more pages" switch, and Clear.
+struct TrailFilterBar: View {
+    @Binding var filter: TrailFilter
+    let choices: Trails.Choices?
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary)
+                menu("Source", "arrow.down.right.circle", $filter.source, choices?.source ?? [])
+                menu("Country", "globe.europe.africa", $filter.country, choices?.country ?? []) { "\(Num.flag($0)) \(Locale.current.localizedString(forRegionCode: $0) ?? $0)" }
+                menu("Device", "ipad.and.iphone", $filter.device, choices?.device ?? []) { $0.capitalized }
+                menu("Page", "doc.text", $filter.path, choices?.page ?? []) { $0 == "/" ? "Home page" : $0 }
+                Toggle(isOn: $filter.deep) { Label("Read 2+ pages", systemImage: "square.stack") }
+                    .toggleStyle(.button).buttonStyle(.bordered)
+                if !filter.isEmpty {
+                    Button { filter = TrailFilter() } label: { Label("Clear", systemImage: "xmark.circle") }
+                        .buttonStyle(.borderless)
+                }
+            }
+            .font(.rcCallout)
+            .controlSize(.small)
+        }
+    }
+
+    private func menu(_ title: String, _ icon: String, _ value: Binding<String>, _ list: [Trails.Choice], name: @escaping (String) -> String = { $0 }) -> some View {
+        Menu {
+            Button { value.wrappedValue = "" } label: { Label("Everyone", systemImage: "person.3") }
+            Divider()
+            ForEach(list, id: \.name) { c in
+                Button { value.wrappedValue = c.name } label: { Text("\(name(c.name)) (\(c.n.formatted()))") }
+            }
+        } label: {
+            Label(value.wrappedValue.isEmpty ? title : name(value.wrappedValue), systemImage: icon)
+                .lineLimit(1)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.bordered)
+        .tint(value.wrappedValue.isEmpty ? nil : .accentColor)
+        .fixedSize()
+    }
+}
+
+/// The routes readers took most that day, such as Home page → Pricing → Sign up.
+struct JourneysCard: View {
+    let journeys: [Trails.Journey]
+    let pick: (String) -> Void
+    @State private var all = false
+
+    var body: some View {
+        let top = Double(max(1, journeys.first?.n ?? 1))
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Common journeys", systemImage: "point.topleft.down.to.point.bottomright.curvepath").font(.rcHeadline)
+            Text("The routes readers took most. Pick one to see the people who ended up on that page.").font(.rcCaption).foregroundStyle(.secondary)
+            ForEach(Array((all ? journeys : Array(journeys.prefix(5))).enumerated()), id: \.offset) { item in
+                let j = item.element
+                Button { if let last = j.steps.last { pick(last) } } label: {
+                    HStack(spacing: 10) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 6) { steps(j) }
+                            Text(j.steps.map(name).joined(separator: " → ")).lineLimit(2).truncationMode(.middle)
+                        }
+                        Spacer(minLength: 8)
+                        Text(j.n.formatted()).bold().monospacedDigit()
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .background(alignment: .leading) {
+                        GeometryReader { g in RoundedRectangle(cornerRadius: 8).fill(Color.accentColor.opacity(0.12)).frame(width: g.size.width * Double(j.n) / top) }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            if journeys.count > 5 {
+                Button { withAnimation { all.toggle() } } label: { Label(all ? "Show fewer" : "Show all \(journeys.count)", systemImage: all ? "chevron.up" : "chevron.down") }
+                    .buttonStyle(.borderless).font(.rcCaption.bold())
+            }
+        }
+        .card()
+    }
+
+    @ViewBuilder private func steps(_ j: Trails.Journey) -> some View {
+        ForEach(Array(j.steps.enumerated()), id: \.offset) { s in
+            if s.offset > 0 { Image(systemName: "arrow.right").font(.rcCaption).foregroundStyle(.secondary) }
+            Text(name(s.element)).lineLimit(1).truncationMode(.middle).padding(.horizontal, 8).padding(.vertical, 3)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+        }
+    }
+
+    private func name(_ path: String) -> String { path == "/" ? "Home page" : path }
+}
+
+/// One visitor on one line: flag, town, how they arrived, first and last page, pages and time. Opens to the full trail.
+struct TrailLine: View {
+    let v: LiveVisitor
+    let expanded: Bool
+    let toggle: () -> Void
+
+    private func page(_ p: String) -> String { p == "/" ? "Home page" : p }
+
+    var body: some View {
+        let views = v.steps.filter { $0.kind == "view" }
+        let pages = Set(views.map(\.path)).count
+        let first = views.first?.path ?? v.page
+        let last = views.last?.path ?? v.page
+        let mins = max(0, Int((v.last - v.first) / 1000))
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: toggle) {
+                HStack(spacing: 10) {
+                    Text(Num.flag(v.country))
+                    SourceIcon(name: v.source.ifEmpty("Direct")).scaleEffect(0.85)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(v.town.ifEmpty(v.country.ifEmpty("Somewhere"))).bold().lineLimit(1)
+                        Text(first == last ? page(first) : "\(page(first)) → \(page(last))").font(.rcCaption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(Date(timeIntervalSince1970: v.first / 1000).formatted(date: .omitted, time: .shortened)).font(.rcCaption.bold()).monospacedDigit()
+                        Text("\(pages) page\(pages == 1 ? "" : "s")\(mins >= 60 ? " · \(Num.time(mins))" : "")").font(.rcCaption).foregroundStyle(.secondary)
+                    }
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.rcCaption).foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if expanded { TrailCard(v: v, bare: true).padding(.leading, 28).padding(.bottom, 6) }
         }
     }
 }
@@ -964,6 +1160,8 @@ struct TrailsContent: View {
 /// One visitor's trail: where they're from, how they arrived, and every step with its time.
 struct TrailCard: View {
     let v: LiveVisitor
+    /// Inside a visitor's line: just the steps, with how they arrived, no card.
+    var bare = false
     @State private var showAll = false
 
     /// One line per page visit: refreshes and repeat views of the same page in a row are folded together.
@@ -1010,7 +1208,10 @@ struct TrailCard: View {
     var body: some View {
         let all = stops
         let shown = showAll || all.count <= 8 ? all : Array(all.prefix(6))
-        VStack(alignment: .leading, spacing: 10) {
+        let content = VStack(alignment: .leading, spacing: 10) {
+            if bare {
+                Text("\(v.source.ifEmpty("Direct")) · \(v.device.capitalized) · \(v.browser) on \(v.os) · \(summary)").font(.rcCaption).foregroundStyle(.secondary)
+            } else {
             HStack(spacing: 10) {
                 Text(Num.flag(v.country)).font(.rcTitle3)
                 VStack(alignment: .leading, spacing: 2) {
@@ -1025,6 +1226,7 @@ struct TrailCard: View {
                     Text("\(time(v.first)) to \(time(v.last))").font(.rcCaption.bold()).monospacedDigit()
                     Text(summary).font(.rcCaption).foregroundStyle(.secondary)
                 }
+            }
             }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(shown.enumerated()), id: \.offset) { item in
@@ -1054,7 +1256,7 @@ struct TrailCard: View {
                 .font(.rcCaption.bold())
             }
         }
-        .card()
+        if bare { content } else { content.card() }
     }
 }
 

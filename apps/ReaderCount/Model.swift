@@ -276,10 +276,11 @@ final class Model {
         do { return (try await API.shared.get(Searches.self, "app/v1/google-searches", ["site": current, "by": by].merging(dates) { _, new in new }), nil) } catch { return (nil, error.localizedDescription) }
     }
 
-    func trails(day: String? = nil, page: Int = 1) async -> Trails? {
+    func trails(day: String? = nil, page: Int = 1, filter: TrailFilter? = nil) async -> Trails? {
         if Demo.on, let l = Demo.live { return Trails(site: current, day: day ?? "", page: 1, total: l.visitors.count, visitors: l.visitors) }
         guard !current.isEmpty else { return nil }
         var q = ["site": current, "page": String(page)]
+        if let filter { q.merge(filter.query) { _, new in new } }
         if let day { q["day"] = day }
         do { return try await API.shared.get(Trails.self, "app/v1/trails", q) } catch { handle(error); return nil }
     }
