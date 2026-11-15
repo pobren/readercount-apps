@@ -840,6 +840,19 @@ struct LiveContent: View {
                     Text("\(l.total)").font(.system(size: 56, weight: .bold, design: .rounded)).monospacedDigit().contentTransition(.numericText())
                     Text("Real-Time Active Visitors").font(.rcHeadline).foregroundStyle(.secondary)
                 }
+                // The menu bar counts every website, so say where the others are when this one has fewer.
+                let elsewhere = (model.summary?.sites ?? []).filter { $0.site != model.current && $0.on_site_now > 0 }
+                if !elsewhere.isEmpty {
+                    HStack(spacing: 8) {
+                        Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(.green)
+                        Text("Also on your other websites now:").foregroundStyle(.secondary)
+                        ForEach(elsewhere, id: \.site) { o in
+                            Button { model.site = o.site } label: { Label("\(o.site) (\(o.on_site_now))", systemImage: "arrow.right.circle") }
+                                .buttonStyle(.bordered).controlSize(.small)
+                        }
+                    }
+                    .font(.rcCallout)
+                }
                 RankList(title: "Pages being read now", icon: "doc.text.magnifyingglass", rows: l.pages.map { .init(name: $0.path, value: $0.n) })
                 RankList(title: "Where they came from", icon: "arrow.down.right.circle", rows: l.sources.map { .init(name: $0.name, value: $0.n) })
                 VStack(alignment: .leading, spacing: 10) {

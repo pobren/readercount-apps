@@ -194,6 +194,7 @@ actor API {
         do {
             (data, response) = try await session.data(for: r)
         } catch {
+            if (error as? URLError)?.code == .cancelled || error is CancellationError { throw CancellationError() }
             throw APIError(message: "We couldn't reach ReaderCount. Check you're online and try again.", status: 0)
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0

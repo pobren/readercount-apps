@@ -178,6 +178,8 @@ final class Model {
     }
 
     private func handle(_ e: Error) {
+        // A request stopped because the screen changed isn't a problem worth showing.
+        if e is CancellationError || Task.isCancelled { return }
         if let a = e as? APIError, a.signedOut {
             Tokens.clear()
             signedIn = false
@@ -226,7 +228,10 @@ final class Model {
     func loadLive() async {
         if Demo.on { live = Demo.live; return }
         guard !current.isEmpty else { return }
-        do { live = try await API.shared.get(Live.self, "app/v1/live", ["site": current]) } catch { handle(error) }
+        do {
+            live = try await API.shared.get(Live.self, "app/v1/live", ["site": current])
+            error = nil
+        } catch { handle(error) }
     }
 
     /// fresh skips the server's 30 second copy, so a change (such as Mark as fixed) shows at once.
