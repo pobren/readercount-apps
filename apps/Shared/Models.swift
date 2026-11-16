@@ -56,9 +56,9 @@ struct SitesSummary: Codable {
 }
 
 struct Overview: Codable {
-    struct Totals: Codable { let visitors: Int; let views: Int; let avg_seconds: Int?; let bounce_percent: Int?; let on_site_now: Int? }
-    struct Previous: Codable { let visitors: Int; let views: Int }
-    struct Day: Codable, Hashable { let day: String; let views: Int; let visitors: Int; let hour: Int? }
+    struct Totals: Codable { let visitors: Int; let views: Int; let avg_seconds: Int?; let bounce_percent: Int?; let on_site_now: Int?; var clicks: Int? = nil }
+    struct Previous: Codable { let visitors: Int; let views: Int; var clicks: Int? = nil }
+    struct Day: Codable, Hashable { let day: String; let views: Int; let visitors: Int; let hour: Int?; var clicks: Int? = nil }
     struct Page: Codable, Hashable { let page: String; let visitors: Int; let views: Int; let avg_seconds: Int? }
     struct Source: Codable, Hashable { let source: String; let visitors: Int }
     struct Country: Codable, Hashable { let country: String; let visitors: Int }

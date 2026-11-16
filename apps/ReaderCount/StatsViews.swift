@@ -244,11 +244,20 @@ struct TilesView: View {
 
     var body: some View {
         let points = (o.per_hour?.count ?? 0) > 1 ? o.per_hour! : o.per_day
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
-            Tile(title: "Visitors", value: Num.short(o.totals.visitors), change: percentChange(o.totals.visitors, o.previous_period.visitors), icon: "person.2.fill", tint: .blue, trend: points.map(\.visitors))
-            Tile(title: "Page views", value: Num.short(o.totals.views), change: percentChange(o.totals.views, o.previous_period.views), icon: "doc.text.fill", tint: .purple, trend: points.map(\.views))
-            Tile(title: "Time on page", value: Num.time(o.totals.avg_seconds), icon: "clock.fill", tint: .teal)
-            Tile(title: "Bounce rate", value: "\(o.totals.bounce_percent ?? 0)%", icon: "arrow.uturn.left", tint: .orange, lowerIsBetter: true)
+        // Older servers don't send a clicks total: add up the clicked links instead.
+        let clicks = o.totals.clicks ?? o.clicks.reduce(0) { $0 + $1.clicks }
+        let clicksTile = Tile(title: "Clicks", value: Num.short(clicks), change: o.previous_period.clicks.flatMap { percentChange(clicks, $0) }, icon: "cursorarrow.click.2", tint: .pink, trend: points.compactMap(\.clicks))
+        // Wide screens show all five in a row; narrow ones a 2 by 2 grid with Clicks across the bottom.
+        let count = columns >= 4 ? 5 : columns
+        VStack(spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: count), spacing: 12) {
+                Tile(title: "Visitors", value: Num.short(o.totals.visitors), change: percentChange(o.totals.visitors, o.previous_period.visitors), icon: "person.2.fill", tint: .blue, trend: points.map(\.visitors))
+                Tile(title: "Page views", value: Num.short(o.totals.views), change: percentChange(o.totals.views, o.previous_period.views), icon: "doc.text.fill", tint: .purple, trend: points.map(\.views))
+                Tile(title: "Time on page", value: Num.time(o.totals.avg_seconds), icon: "clock.fill", tint: .teal)
+                Tile(title: "Bounce rate", value: "\(o.totals.bounce_percent ?? 0)%", icon: "arrow.uturn.left", tint: .orange, lowerIsBetter: true)
+                if count == 5 { clicksTile }
+            }
+            if count != 5 { clicksTile }
         }
     }
 }
@@ -799,13 +808,18 @@ struct TodayContent: View {
                 let pages = RankList(title: "Top pages", icon: "doc.richtext", rows: o.top_pages.map { .init(name: $0.page, value: $0.visitors) }, drill: "page")
                 let sources = RankList(title: "Sources", icon: "arrow.down.right.circle", rows: o.sources.map { .init(name: $0.source, value: $0.visitors) }, drill: "source")
                 let countries = RankList(title: "Countries", icon: "globe.europe.africa", rows: o.countries.map { .init(name: "\(Num.flag($0.country)) \($0.country)", value: $0.visitors, key: $0.country) }, drill: "country")
+                // Each link once, with its clicks from every page added up.
+                let byLink = Dictionary(grouping: o.clicks, by: \.link).map { RankList.Row(name: $0.key, value: $0.value.reduce(0) { $0 + $1.clicks }) }
+                let clicks = RankList(title: "Clicks", icon: "cursorarrow.click.2", rows: byLink, empty: "No link clicks for these dates.")
                 if columns >= 4 {
                     HStack(alignment: .top, spacing: 16) { pages; sources }
+                    HStack(alignment: .top, spacing: 16) { clicks; countries }
                     ReaderMap()
-                    HStack(alignment: .top, spacing: 16) { countries; DevicesDonut(o: o) }
+                    DevicesDonut(o: o)
                 } else {
                     pages
                     sources
+                    clicks
                     ReaderMap(height: 240)
                     countries
                     DevicesDonut(o: o)

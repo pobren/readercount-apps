@@ -36,18 +36,25 @@ struct MacRoot: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $pane) {
-                // Live sits at the very top with a light: green when readers are on now, grey when nobody is.
-                LiveMenuRow(count: liveHere).tag(MacPane.live)
-                Section("Stats") {
-                    ForEach([MacPane.overview, .trails]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                // The two "how are things right now" rows sit at the very top, each with its light:
+                // Live is green when readers are on now; Site Health is green, amber or red.
+                Section {
+                    LiveMenuRow(count: liveHere).tag(MacPane.live)
                     HealthMenuRow(light: healthLight).tag(MacPane.health)
-                    Label(MacPane.housekeeping.title, systemImage: MacPane.housekeeping.icon).tag(MacPane.housekeeping)
+                }
+                Section("Stats") {
+                    ForEach([MacPane.overview, .trails, .sources, .google, .clicks, .countries, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }
                 }
                 Section("More") {
-                    ForEach([MacPane.google, .sources, .clicks, .countries, .devices, .browsers, .campaigns]) { p in Label(p.title, systemImage: p.icon).tag(p) }
-                }
-                Section("Account") {
-                    ForEach([MacPane.alerts, .account]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                    ForEach([MacPane.alerts, .housekeeping, .account]) { p in Label(p.title, systemImage: p.icon).tag(p) }
+                    Link(destination: Shared.app) { Label("Website", systemImage: "safari") }
+                        .foregroundStyle(.primary)
+                    Button {
+                        Task { await model.signOut() }
+                    } label: {
+                        Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
@@ -126,7 +133,8 @@ struct HealthMenuRow: View {
         HStack(spacing: 8) {
             Label(MacPane.health.title, systemImage: MacPane.health.icon)
             Spacer()
-            if let light { Circle().fill(light).frame(width: 9, height: 9) }
+            Circle().fill(light ?? Color.secondary.opacity(0.4)).frame(width: 9, height: 9)
+                .shadow(color: (light ?? .clear).opacity(0.6), radius: 3)
         }
     }
 }
@@ -147,17 +155,8 @@ struct AccountFooter: View {
             Divider()
             Text(model.me?.email ?? "").font(.rcCaption).lineLimit(1)
             if let p = model.me?.plan { Text("\(p.name) plan").font(.rcCaption2).foregroundStyle(.secondary) }
-            HStack {
-                Link(destination: Shared.app) { Label("Website", systemImage: "safari") }
-                Spacer()
-                Button {
-                    Task { await model.signOut() }
-                } label: {
-                    Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
-                }
-            }
-            .buttonStyle(.borderless).font(.rcCaption)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
     }
 }
