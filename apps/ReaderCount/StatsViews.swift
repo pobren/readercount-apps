@@ -1364,7 +1364,6 @@ struct HealthContent: View {
                                 Image(systemName: k.icon).foregroundStyle(k.tint)
                                 Text(k.title).font(.rcCaption.bold()).foregroundStyle(k.tint)
                                 Spacer()
-                                CopyIssueButton(text: [f.page, f.what, f.todo].joined(separator: "\n")).controlSize(.small)
                             }
                             Text(f.page == "/" ? "Home page" : f.page).font(.rcHeadline).lineLimit(1).truncationMode(.middle)
                             Text(f.what).font(.rcCallout)
@@ -1372,6 +1371,17 @@ struct HealthContent: View {
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(k.tint.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                            HStack(spacing: 10) {
+                                if let key = f.key {
+                                    Button {
+                                        Task { await model.markFixed(.init(level: "", title: "\(k.title): \(f.page == "/" ? "Home page" : f.page)", detail: "", links: [], key: key)) }
+                                    } label: {
+                                        Label("Mark as done", systemImage: "checkmark.circle")
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                                CopyIssueButton(text: [f.page, f.what, f.todo].joined(separator: "\n"))
+                            }
                         }
                         .issueBox(k.tint)
                     }
@@ -1383,7 +1393,7 @@ struct HealthContent: View {
                             withAnimation { showDone.toggle() }
                         } label: {
                             HStack {
-                                Label("Marked as fixed (\(h.marked.count))", systemImage: "checkmark.circle.fill").font(.rcHeadline).foregroundStyle(.green)
+                                Label("Done (\(h.marked.count))", systemImage: "checkmark.circle.fill").font(.rcHeadline).foregroundStyle(.green)
                                 Spacer()
                                 Text(showDone ? "Hide" : "Show").font(.rcCaption).foregroundStyle(.secondary)
                                 Image(systemName: showDone ? "chevron.up" : "chevron.down").foregroundStyle(.secondary)

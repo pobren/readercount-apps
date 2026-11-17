@@ -168,6 +168,8 @@ struct Health: Codable {
         let query: String?
         let what: String
         let todo: String
+        /// For Mark as done (missing from older servers).
+        var key: String? = nil
         var id: String { kind + page + (query ?? "") }
     }
     let site: String
