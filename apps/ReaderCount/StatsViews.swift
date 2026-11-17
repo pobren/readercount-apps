@@ -197,23 +197,46 @@ struct Tile: View {
     /// For bounce rate a fall is good news.
     var lowerIsBetter = false
 
+    private var iconView: some View {
+        Image(systemName: icon).font(.rcCallout.weight(.semibold)).foregroundStyle(tint)
+            .frame(width: 30, height: 30).background(tint.opacity(0.14), in: Circle())
+    }
+
+    private var valueText: some View {
+        Text(value).font(.rcTitle2.bold()).monospacedDigit().contentTransition(.numericText())
+    }
+
+    private var changeBadge: AnyView? {
+        guard let change else { return nil }
+        let good = lowerIsBetter ? change <= 0 : change >= 0
+        return AnyView(Label("\(abs(change))%", systemImage: change >= 0 ? "arrow.up.right" : "arrow.down.right")
+            .font(.rcCaption.bold()).foregroundStyle(good ? .green : .orange)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background((good ? Color.green : Color.orange).opacity(0.12), in: Capsule()))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: icon).font(.rcCallout.weight(.semibold)).foregroundStyle(tint)
-                    .frame(width: 30, height: 30).background(tint.opacity(0.14), in: Circle())
+            // Narrow tiles (five across on a small Mac window) drop the icon before the title gets cut,
+            // and put the change under the number instead of squeezing both onto one line.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    iconView
+                    Text(title).font(.rcCallout.weight(.semibold)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    Spacer(minLength: 0)
+                }
                 Text(title).font(.rcCallout.weight(.semibold)).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
+                    .lineLimit(1).minimumScaleFactor(0.75).frame(minHeight: 30)
             }
-            HStack(alignment: .firstTextBaseline) {
-                Text(value).font(.rcTitle2.bold()).monospacedDigit().contentTransition(.numericText())
-                Spacer(minLength: 4)
-                if let change {
-                    let good = lowerIsBetter ? change <= 0 : change >= 0
-                    Label("\(abs(change))%", systemImage: change >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        .font(.rcCaption.bold()).foregroundStyle(good ? .green : .orange)
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background((good ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) {
+                    valueText.fixedSize()
+                    Spacer(minLength: 4)
+                    changeBadge?.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    valueText.lineLimit(1).minimumScaleFactor(0.6)
+                    changeBadge?.fixedSize()
                 }
             }
             if trend.count > 1 {
