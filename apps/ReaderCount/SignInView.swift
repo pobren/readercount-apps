@@ -12,6 +12,8 @@ struct SignInView: View {
     @State private var code = ""
     @State private var codeSent = false
     @FocusState private var focus: Field?
+    /// On iPhone and iPad the code box is a UIKit field (OneTimeCodeField), which SwiftUI's focus can't reach.
+    @State private var codeFocus = false
     @Environment(\.scenePhase) private var phase
     @State private var wentAway = false
 
@@ -81,9 +83,11 @@ struct SignInView: View {
     private func refocus() {
         guard codeSent, code.isEmpty else { return }
         focus = nil
+        codeFocus = false
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
             focus = .code
+            codeFocus = true
         }
     }
 
@@ -143,20 +147,28 @@ struct SignInView: View {
         #endif
     }
 
+    @ViewBuilder private var codeBox: some View {
+        #if os(iOS)
+        OneTimeCodeField(text: $code, focused: codeFocus, placeholder: "Six-digit code",
+                         onFocusChange: { codeFocus = $0 },
+                         onSubmit: { Task { await finish() } })
+            .frame(height: 30)
+        #else
+        TextField("Six-digit code", text: $code)
+            .textContentType(.oneTimeCode)
+            .font(.rcTitle2.monospacedDigit())
+            .multilineTextAlignment(.center)
+            .focused($focus, equals: .code)
+            .onSubmit { Task { await finish() } }
+        #endif
+    }
+
     private var codeStep: some View {
         VStack(spacing: 14) {
             Text("We've emailed a six-digit code to \(email). Click Sign in to the app in the email, or type the code here.")
                 .font(.rcCallout).multilineTextAlignment(.center)
 
-            TextField("Six-digit code", text: $code)
-                .textContentType(.oneTimeCode)
-                #if os(iOS)
-                .keyboardType(.numberPad)
-                #endif
-                .font(.rcTitle2.monospacedDigit())
-                .multilineTextAlignment(.center)
-                .focused($focus, equals: .code)
-                .onSubmit { Task { await finish() } }
+            codeBox
                 .onChange(of: code) { _, now in
                     if now.filter(\.isNumber).count == 6 { Task { await finish() } }
                 }
@@ -206,6 +218,7 @@ struct SignInView: View {
                     codeSent = false
                     code = ""
                     model.error = nil
+                    codeFocus = false
                     focus = .email
                 } label: {
                     Label("Use another email", systemImage: "pencil")
@@ -222,6 +235,7 @@ struct SignInView: View {
         if await model.requestCode(email: email) {
             codeSent = true
             focus = .code
+            codeFocus = true
         }
     }
 
