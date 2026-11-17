@@ -1,0 +1,59 @@
+# Puts the App Store listing (text from fastlane/metadata, screenshots from the app-screenshots branch) into the
+# 1.0 drafts for iPhone/iPad and Mac in App Store Connect. Run by hand. It never submits anything for review:
+# that stays a button press in App Store Connect. App Privacy answers, age rating, price and the review sign in
+# code are set on the website.
+name: App Store listing
+
+on:
+  workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Upload screenshots too (replaces the ones there)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: app-screenshots
+          path: shots
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Install fastlane
+        run: gem install fastlane --no-document
+      - name: App Store Connect key
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          ruby -rjson -e 'File.write("/tmp/asc.json", JSON.generate(key_id: ENV["ASC_KEY_ID"], issuer_id: ENV["ASC_ISSUER_ID"], key: ENV["ASC_KEY"], in_house: false))'
+      - name: Sort screenshots by device
+        run: |
+          mkdir -p /tmp/ios/en-GB /tmp/mac/en-GB
+          cp shots/iphone-*.png shots/ipad-*.png /tmp/ios/en-GB/
+          cp shots/mac-*.png /tmp/mac/en-GB/
+          ls -R /tmp/ios /tmp/mac
+      - name: iPhone and iPad listing
+        run: |
+          SHOTS=$([ "${{ inputs.screenshots }}" = true ] && echo "--screenshots_path /tmp/ios --overwrite_screenshots true" || echo "--skip_screenshots true")
+          fastlane deliver --api_key_path /tmp/asc.json --app_identifier com.readercount.app --platform ios \
+            --app_version 1.0 --metadata_path fastlane/metadata $SHOTS \
+            --skip_binary_upload true --submit_for_review false --automatic_release false \
+            --force true --run_precheck_before_submit false --ignore_language_directory_validation true
+      - name: Mac listing
+        run: |
+          SHOTS=$([ "${{ inputs.screenshots }}" = true ] && echo "--screenshots_path /tmp/mac --overwrite_screenshots true" || echo "--skip_screenshots true")
+          fastlane deliver --api_key_path /tmp/asc.json --app_identifier com.readercount.app --platform osx \
+            --app_version 1.0 --metadata_path fastlane/metadata $SHOTS \
+            --skip_binary_upload true --submit_for_review false --automatic_release false \
+            --force true --run_precheck_before_submit false --ignore_language_directory_validation true
