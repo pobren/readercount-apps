@@ -177,6 +177,20 @@ final class Model {
         health = nil
     }
 
+    /// Deletes the ReaderCount account, its websites and all their stats (the same as Delete my account on the
+    /// website), then signs out. Returns a message to show if it couldn't.
+    func deleteAccount() async -> String? {
+        if Demo.on { await signOut(); return nil }
+        do {
+            try await API.shared.send("app/v1/account/delete", ["confirm": "DELETE"])
+        } catch {
+            return error.localizedDescription
+        }
+        deviceToken = nil
+        await signOut()
+        return nil
+    }
+
     private func handle(_ e: Error) {
         // A request stopped because the screen changed isn't a problem worth showing.
         if e is CancellationError || Task.isCancelled { return }

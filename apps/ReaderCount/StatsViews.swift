@@ -535,6 +535,10 @@ struct ShareCard: View {
 /// Plans and billing are changed on the website; the app never shows prices or upgrade links.
 struct AccountSections: View {
     @Environment(Model.self) private var model
+    @State private var askDelete = false
+    @State private var typed = ""
+    @State private var deleting = false
+    @State private var deleteError: String?
 
     var body: some View {
         Section("Signed in as") {
@@ -571,6 +575,50 @@ struct AccountSections: View {
                 Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
             }
         }
+        Section {
+            Button(role: .destructive) {
+                typed = ""
+                askDelete = true
+            } label: {
+                Label(deleting ? "Deleting your account…" : "Delete my account", systemImage: "trash")
+            }
+            .disabled(deleting)
+        } footer: {
+            Text("Permanently deletes your account, your websites and all their stats. This can't be undone.")
+        }
+        .alert("Delete your account?", isPresented: $askDelete) {
+            TextField("Type DELETE", text: $typed)
+                .textInputAutocapitalizationIfAvailable()
+            Button("Delete my account", role: .destructive) {
+                guard typed.trimmingCharacters(in: .whitespaces).uppercased() == "DELETE" else {
+                    deleteError = "Type DELETE to confirm."
+                    return
+                }
+                deleting = true
+                Task {
+                    deleteError = await model.deleteAccount()
+                    deleting = false
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes \(model.me?.email ?? "your account"), your websites and all their stats. Type DELETE to confirm.")
+        }
+        .alert("Couldn't delete your account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteError ?? "")
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder func textInputAutocapitalizationIfAvailable() -> some View {
+        #if os(iOS)
+        self.textInputAutocapitalization(.characters).autocorrectionDisabled()
+        #else
+        self.autocorrectionDisabled()
+        #endif
     }
 }
 
