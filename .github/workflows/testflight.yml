@@ -1,0 +1,187 @@
+# Signs the app with Paul's App Store Connect key and sends it to TestFlight, for iPhone and iPad and for the Mac.
+# It runs when a commit message starts with [testflight] (both apps), [testflight ios] (iPhone and iPad only)
+# or [testflight mac] (Mac only), or by hand from the Actions tab with a choice of platform.
+# This repo is public, so GitHub doesn't charge for its Mac minutes. Still build only the app that changed and group
+# changes, and a cheap Linux check catches Swift syntax slips before any Mac starts.
+# Signing is automatic: Xcode registers the app IDs, capabilities and certificates itself with the key.
+# Apple doesn't let a key create App Groups, so group.com.readercount.app is registered by hand and given to
+# com.readercount.app and com.readercount.app.widget in Certificates, Identifiers & Profiles.
+#
+# Secrets: ASC_KEY (the .p8 file's text), ASC_KEY_ID, ASC_ISSUER_ID, APPLE_TEAM_ID.
+name: TestFlight
+
+on:
+  push:
+    paths: ["apps/**", ".github/workflows/testflight.yml"]
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which app to build
+        type: choice
+        options: [both, ios, mac]
+        default: both
+
+jobs:
+  # Cheap first pass on Linux: if the Swift doesn't even parse, stop before paying for a Mac.
+  check:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[testflight')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      platforms: ${{ steps.pick.outputs.platforms }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick the apps to build
+        id: pick
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+          INPUT: ${{ inputs.platform }}
+        run: |
+          first=$(printf '%s' "$MSG" | head -1)
+          case "$INPUT:$first" in
+            ios:*|both:*) want="$INPUT" ;;
+            mac:*) want=mac ;;
+            *"[testflight ios]"*) want=ios ;;
+            *"[testflight mac]"*) want=mac ;;
+            *) want=both ;;
+          esac
+          case "$want" in ios) p="iOS" ;; mac) p="macOS" ;; *) p="iOS macOS" ;; esac
+          echo "Building: $p"
+          echo "platforms=$p" >> "$GITHUB_OUTPUT"
+      - name: Check every Swift file parses
+        run: |
+          command -v swiftc >/dev/null || { echo "::warning::No Swift on this Linux image, skipping the parse check"; exit 0; }
+          swiftc --version
+          find apps -name '*.swift' -print0 | xargs -0 -n1 swiftc -parse
+
+  upload:
+    needs: check
+    runs-on: macos-26
+    timeout-minutes: 60
+    # On the job, not the workflow, so the skipped runs of ordinary commits can't cancel a waiting build.
+    concurrency:
+      group: testflight
+      cancel-in-progress: false
+    env:
+      DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    defaults:
+      run:
+        working-directory: apps
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the secrets are there
+        env:
+          ASC_KEY: ${{ secrets.ASC_KEY }}
+        run: |
+          for v in ASC_KEY ASC_KEY_ID ASC_ISSUER_ID DEVELOPMENT_TEAM; do
+            [ -n "${!v}" ] || { echo "Missing secret for $v"; exit 1; }
+          done
+          mkdir -p ~/private_keys
+          printf '%s\n' "$ASC_KEY" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+      - name: Check the key with Apple
+        run: |
+          cat > /tmp/jwt.rb <<'RUBY'
+          require "openssl"; require "base64"; require "json"
+          b = ->(s) { Base64.urlsafe_encode64(s, padding: false) }
+          key = OpenSSL::PKey::EC.new(File.read(ARGV[0]))
+          h = b.(JSON.generate(alg: "ES256", kid: ENV["ASC_KEY_ID"], typ: "JWT"))
+          now = Time.now.to_i
+          p = b.(JSON.generate(iss: ENV["ASC_ISSUER_ID"], iat: now, exp: now + 600, aud: "appstoreconnect-v1"))
+          der = key.dsa_sign_asn1(OpenSSL::Digest::SHA256.digest("#{h}.#{p}"))
+          seq = OpenSSL::ASN1.decode(der).value.map { |i| i.value.to_s(2).rjust(32, "\0")[-32, 32] }.join
+          print "#{h}.#{p}.#{b.(seq)}"
+          RUBY
+          echo "Key ID length ${#ASC_KEY_ID}, issuer ID length ${#ASC_ISSUER_ID}, team ID length ${#DEVELOPMENT_TEAM}"
+          head -1 ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 | sed 's/[A-Za-z0-9+/=]\{8,\}/(key)/'
+          T=$(ruby /tmp/jwt.rb ~/private_keys/AuthKey_${ASC_KEY_ID}.p8)
+          for path in "v1/apps?limit=5&fields[apps]=bundleId,name" "v1/bundleIds?limit=10&fields[bundleIds]=identifier"; do
+            echo "== $path"
+            curl -gsS -o /tmp/r.json -w "%{http_code}" -H "Authorization: Bearer $T" "https://api.appstoreconnect.apple.com/$path" > /tmp/code
+            head -c 1500 /tmp/r.json; echo; echo "HTTP $(cat /tmp/code)"
+            [ "$(cat /tmp/code)" = 200 ] || { echo "::error::Apple turned down the App Store Connect key. Check ASC_KEY, ASC_KEY_ID and ASC_ISSUER_ID."; exit 1; }
+          done
+      - name: Register the app IDs with Apple (Xcode's automatic signing then makes their profiles)
+        run: |
+          T=$(ruby /tmp/jwt.rb ~/private_keys/AuthKey_${ASC_KEY_ID}.p8)
+          for pair in "com.readercount.app:ReaderCount" "com.readercount.app.widget:ReaderCount Widget"; do
+            id=${pair%%:*}; name=${pair#*:}
+            body=$(printf '{"data":{"type":"bundleIds","attributes":{"identifier":"%s","name":"%s","platform":"UNIVERSAL"}}}' "$id" "$name")
+            code=$(curl -gsS -o /tmp/b.json -w "%{http_code}" -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+              -d "$body" https://api.appstoreconnect.apple.com/v1/bundleIds)
+            echo "$id: HTTP $code"
+            [ "$code" = 201 ] || grep -o '"detail" *: *"[^"]*"' /tmp/b.json || true
+          done
+      - name: Use the newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)
+          [ -n "$X" ] || { echo "No Xcode 26 or newer on this Mac"; exit 1; }
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+      - name: Make the Xcode project
+        # The release download takes seconds; brew install took a minute or two of Mac time.
+        run: |
+          if curl -fsSL -o /tmp/xcodegen.zip https://github.com/yonaskolb/XcodeGen/releases/download/2.42.0/xcodegen.zip && unzip -q /tmp/xcodegen.zip -d /tmp/xg; then
+            /tmp/xg/xcodegen/bin/xcodegen generate
+          else
+            brew install xcodegen && xcodegen generate
+          fi
+      - name: Archive, sign and upload
+        run: |
+          set -o pipefail
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+                -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          cat > export.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>${DEVELOPMENT_TEAM}</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          BUILD=$(( ${{ github.run_number }} + 100 ))
+          FAILED=""
+          for P in ${{ needs.check.outputs.platforms }}; do
+            echo "::group::$P"
+            ( set -o pipefail
+            xcodebuild archive -project ReaderCount.xcodeproj -scheme ReaderCount -configuration Release \
+              -destination "generic/platform=$P" -archivePath "build/$P.xcarchive" \
+              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" CURRENT_PROJECT_VERSION="$BUILD" "${AUTH[@]}" | tail -n 40 &&
+            xcodebuild -exportArchive -archivePath "build/$P.xcarchive" -exportOptionsPlist export.plist \
+              -exportPath "build/$P-export" "${AUTH[@]}" | tail -n 40
+            ) || FAILED="$FAILED $P"
+            echo "::endgroup::"
+          done
+          [ -z "$FAILED" ] || { echo "::error::Failed for:$FAILED"; exit 1; }
+          echo "Build $BUILD sent to App Store Connect. It shows in TestFlight once Apple has processed it."
+      - name: Show what Apple has and the export logs
+        if: failure()
+        run: |
+          T=$(ruby /tmp/jwt.rb ~/private_keys/AuthKey_${ASC_KEY_ID}.p8) || exit 0
+          echo "== certificates"
+          curl -gsS -H "Authorization: Bearer $T" "https://api.appstoreconnect.apple.com/v1/certificates?fields[certificates]=certificateType,displayName,expirationDate&limit=50" | grep -E '"(certificateType|displayName|expirationDate)"' || true
+          echo "== profiles"
+          curl -gsS -H "Authorization: Bearer $T" "https://api.appstoreconnect.apple.com/v1/profiles?fields[profiles]=name,profileType,profileState&limit=50" | grep -E '"(name|profileType|profileState)"' || true
+          echo "== bundle IDs"
+          curl -gsS -H "Authorization: Bearer $T" "https://api.appstoreconnect.apple.com/v1/bundleIds?fields[bundleIds]=identifier,platform&limit=50" | grep -E '"(identifier|platform)"' || true
+          for f in $(find /var/folders -name "IDEDistribution*.log" -path "*xcdistributionlogs*" 2>/dev/null | head -4); do
+            echo "== $f"; grep -iE "error|fail|401|403|auth|status" "$f" | tail -n 40
+          done
+      - name: Tidy up the throwaway development certificates this Mac made
+        if: always()
+        run: |
+          [ -f /tmp/jwt.rb ] && [ -f ~/private_keys/AuthKey_${ASC_KEY_ID}.p8 ] || exit 0
+          T=$(ruby /tmp/jwt.rb ~/private_keys/AuthKey_${ASC_KEY_ID}.p8)
+          curl -gsS -H "Authorization: Bearer $T" "https://api.appstoreconnect.apple.com/v1/certificates?filter[certificateType]=DEVELOPMENT&fields[certificates]=displayName&limit=200" \
+            | ruby -rjson -e 'JSON.parse(STDIN.read)["data"].each { |c| puts c["id"] if c["attributes"]["displayName"] == "Created via API" }' \
+            | while read -r id; do
+                code=$(curl -gsS -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $T" "https://api.appstoreconnect.apple.com/v1/certificates/$id")
+                echo "Revoked development certificate $id: HTTP $code"
+              done
+      - name: Remove the key
+        if: always()
+        run: rm -rf ~/private_keys

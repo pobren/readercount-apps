@@ -1,0 +1,19 @@
+# Free on Linux: checks every Swift file parses on each push, so a slip shows before any TestFlight build.
+name: Check
+
+on:
+  push:
+    paths: ["apps/**", ".github/workflows/check.yml"]
+  pull_request:
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check every Swift file parses
+        run: |
+          command -v swiftc >/dev/null || { echo "::warning::No Swift on this Linux image, skipping the parse check"; exit 0; }
+          swiftc --version
+          find apps -name '*.swift' -print0 | xargs -0 -n1 swiftc -parse
