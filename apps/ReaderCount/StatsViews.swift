@@ -203,10 +203,13 @@ struct Tile: View {
                 Image(systemName: icon).font(.rcCallout.weight(.semibold)).foregroundStyle(tint)
                     .frame(width: 30, height: 30).background(tint.opacity(0.14), in: Circle())
                 Text(title).font(.rcCallout.weight(.semibold)).foregroundStyle(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.75)
                 Spacer(minLength: 0)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(value).font(.rcTitle2.bold()).monospacedDigit().contentTransition(.numericText())
+                    // Never break a number over two lines in narrow tiles (five across on a small Mac window).
+                    .lineLimit(1).minimumScaleFactor(0.6).layoutPriority(1)
                 Spacer(minLength: 4)
                 if let change {
                     let good = lowerIsBetter ? change <= 0 : change >= 0

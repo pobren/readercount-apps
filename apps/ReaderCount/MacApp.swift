@@ -158,6 +158,8 @@ struct AccountFooter: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
+        // The menu scrolls under the footer on short windows, so it needs its own background.
+        .background(.regularMaterial)
     }
 }
 
