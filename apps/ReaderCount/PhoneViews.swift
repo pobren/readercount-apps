@@ -6,7 +6,8 @@ import SwiftUI
 
 struct PhoneRoot: View {
     @Environment(Model.self) private var model
-    @State private var tab = Demo.tab ?? "today"
+    // Screenshots: -tab trails (or any More item) opens that page inside More.
+    @State private var tab = Demo.tab.map { MoreItem(rawValue: $0) != nil ? "more" : $0 } ?? "today"
 
     var body: some View {
         Group {
@@ -56,16 +57,14 @@ struct PhoneRoot: View {
 struct MoreView: View {
     @Environment(Model.self) private var model
 
+    @State private var path: [MoreItem] = Demo.tab.flatMap { MoreItem(rawValue: $0) }.map { [$0] } ?? []
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 Section {
                     ForEach(MoreItem.allCases) { item in
-                        NavigationLink {
-                            ScrollView { item.content.padding().frame(maxWidth: 760).frame(maxWidth: .infinity) }
-                                .navigationTitle(item.title)
-                                .toolbar { ToolbarItem(placement: .topBarTrailing) { SitePicker() } }
-                        } label: {
+                        NavigationLink(value: item) {
                             Label(item.title, systemImage: item.icon)
                         }
                     }
@@ -77,6 +76,11 @@ struct MoreView: View {
                 }
             }
             .navigationTitle("More")
+            .navigationDestination(for: MoreItem.self) { item in
+                ScrollView { item.content.padding().frame(maxWidth: 760).frame(maxWidth: .infinity) }
+                    .navigationTitle(item.title)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { SitePicker() } }
+            }
         }
     }
 }

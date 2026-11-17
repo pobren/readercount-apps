@@ -51,11 +51,13 @@ jobs:
             xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
             xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
             xcrun simctl install "$UDID" "$APP"
-            for tab in today live health more account signin; do
-              if [ "$tab" = signin ]; then ARGS=""; else ARGS="-demo -tab $tab -AppleLanguages (en-GB) -AppleLocale en_GB"; fi
+            N=0
+            for tab in today live trails countries health alerts; do
+              N=$((N+1))
+              ARGS="-demo -tab $tab -AppleLanguages (en-GB) -AppleLocale en_GB"
               xcrun simctl launch --terminate-running-process "$UDID" com.readercount.app $ARGS
               sleep 7
-              xcrun simctl io "$UDID" screenshot "shots/$2-$tab.png"
+              xcrun simctl io "$UDID" screenshot "shots/$2-$N-$tab.png"
             done
             xcrun simctl shutdown "$UDID"
           }
@@ -67,17 +69,21 @@ jobs:
       - name: Mac
         continue-on-error: true
         run: |
+          python3 -m pip install --quiet --break-system-packages pillow || python3 -m pip install --quiet pillow
           mkdir -p shots
           MAC=$(find build/mac -name "*.app" -path "*Debug*" -maxdepth 5 | head -1)
-          for pane in overview live health sources; do
+          N=0
+          for pane in overview live trails countries health alerts; do
+            N=$((N+1))
             open -n "$MAC" --args -demo -tab $pane -AppleLanguages "(en-GB)" -AppleLocale en_GB
             sleep 14
-            screencapture -x shots/mac-$pane.png
             WIN=$(cat $(find /var/folders "$HOME/Library/Containers" -name "readercount-win.txt" 2>/dev/null | head -1) 2>/dev/null)
-            if [ -n "$WIN" ]; then screencapture -o -x -l "$WIN" shots/mac-$pane.png || true; fi
+            if [ -n "$WIN" ]; then screencapture -x -l "$WIN" shots/raw-$pane.png || true; else screencapture -x shots/raw-$pane.png; fi
             find /var/folders "$HOME/Library/Containers" -name "readercount-win.txt" -delete 2>/dev/null || true
             pkill -x ReaderCount || true
             sleep 2
+            # The App Store wants 1280 by 800 or bigger: put the window (with its shadow) on a calm background.
+            python3 ../.github/scripts/mac-frame.py shots/raw-$pane.png shots/mac-$N-$pane.png && rm shots/raw-$pane.png
           done
       - name: Save to the app-screenshots branch
         if: always()
