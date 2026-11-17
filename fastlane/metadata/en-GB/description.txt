@@ -1,0 +1,17 @@
+ReaderCount shows you who reads your website, without cookies and without tracking anyone.
+
+See today at a glance: visitors, page views, time on page and clicks on your links, with a chart by the hour and a comparison with yesterday.
+
+Watch readers arrive live, with the pages they're on and where they came from.
+
+Follow visitor trails to see the path each reader takes through your site, and the journeys that come up most often.
+
+Find out where readers come from: Google, social sites, newsletters and campaign links, plus the countries and towns they read from.
+
+Site Health checks your pages for broken links, missing titles and other problems, and gives you ways to improve. Mark each one as done when it's fixed.
+
+Get alerts when traffic spikes or stops, when a link breaks, or when a page passes a number you choose.
+
+Widgets on your Home Screen and a live count in the Mac menu bar keep your numbers in view.
+
+ReaderCount counts visits without cookies, so your readers never see a consent banner. You'll need a ReaderCount account and the ReaderCount script on your site. Settings and plans are managed on readercount.com.

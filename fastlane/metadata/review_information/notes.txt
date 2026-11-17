@@ -1,0 +1,5 @@
+ReaderCount is a free companion app for the ReaderCount website stats service. Sign in with the email address above, tap Send code, then enter the code given in the password field (the review account doesn't receive an emailed code). The account has a demo website with sample data so every screen has something to show.
+
+There are no purchases in the app and no links to buy anything. Plans are managed on our website, and the app works fully on the free plan.
+
+Notifications are optional and only used for the alerts the user sets up.
