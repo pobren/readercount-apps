@@ -76,7 +76,7 @@ struct MacRoot: View {
                 ToolbarItem { SitePicker() }
                 ToolbarItem {
                     Button {
-                        Task { await model.refresh(); await model.loadLive(); await model.loadHealth() }
+                        Task { model.bumpReload(force: true); await model.refresh(); await model.loadLive(); await model.loadHealth() }
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }

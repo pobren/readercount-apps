@@ -47,7 +47,7 @@ struct PhoneRoot: View {
                     .frame(maxWidth: 760)
                     .frame(maxWidth: .infinity)
             }
-            .refreshable { await model.refresh(); await model.loadLive(); await model.loadHealth() }
+            .refreshable { model.bumpReload(force: true); await model.refresh(); await model.loadLive(); await model.loadHealth() }
             .navigationTitle(title)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { SitePicker() } }
         }
