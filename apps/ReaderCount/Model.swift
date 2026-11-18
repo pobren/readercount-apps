@@ -53,7 +53,22 @@ final class Model {
         return ["period": "30d", "from": f.string(from: min(customFrom, customTo)), "to": f.string(from: max(customFrom, customTo))]
     }
     /// Changes whenever the dates do, so screens reload.
-    var datesKey: String { dates.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&") }
+    /// Also changes when the lists are due a reload (see reloadTick), so maps, towns and other lists don't keep showing
+    /// yesterday's figures after midnight.
+    var datesKey: String { dates.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "&") + "#\(reloadTick)" }
+    /// Goes up when the lists on screen should load again: a new day (UTC, as the stats are), every five minutes
+    /// while open, and on pull to refresh. The headline numbers reload every 30 seconds on their own.
+    var reloadTick = 0
+    private var tickDay = ""
+    private var tickAt = Date.distantPast
+    func bumpReload(force: Bool = false) {
+        let day = ISO8601DateFormatter.string(from: Date(), timeZone: TimeZone(identifier: "UTC")!, formatOptions: [.withFullDate])
+        if force || day != tickDay || Date().timeIntervalSince(tickAt) >= 300 {
+            if !tickDay.isEmpty || force { reloadTick += 1 }
+            tickDay = day
+            tickAt = Date()
+        }
+    }
     /// Each website's favicon, for the website picker.
     var favicons: [String: Image] = [:]
     var overview: Overview?
@@ -217,6 +232,7 @@ final class Model {
             error = nil
             Task { await loadFavicons() }
             if !current.isEmpty { await loadOverview() }
+            bumpReload()
         } catch {
             handle(error)
         }
