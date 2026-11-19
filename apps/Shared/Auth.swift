@@ -36,6 +36,8 @@ struct Tokens: Codable, Equatable {
 struct APIError: LocalizedError {
     let message: String
     let status: Int
+    /// The request never reached ReaderCount (no connection, or one that dropped as the app woke up).
+    var offline = false
     var errorDescription: String? { message }
     var signedOut: Bool { status == 401 }
 }
@@ -160,7 +162,7 @@ actor API {
             (data, response) = try await session.data(for: r)
         } catch {
             if (error as? URLError)?.code == .cancelled || error is CancellationError { throw CancellationError() }
-            throw APIError(message: "We couldn't reach ReaderCount. Check you're online and try again.", status: 0)
+            throw APIError(message: "We couldn't reach ReaderCount. Check you're online and try again.", status: 0, offline: true)
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         // Only a definite "that token isn't valid" signs the person out; a busy server or a bad connection doesn't.
@@ -218,7 +220,7 @@ actor API {
             (data, response) = try await session.data(for: r)
         } catch {
             if (error as? URLError)?.code == .cancelled || error is CancellationError { throw CancellationError() }
-            throw APIError(message: "We couldn't reach ReaderCount. Check you're online and try again.", status: 0)
+            throw APIError(message: "We couldn't reach ReaderCount. Check you're online and try again.", status: 0, offline: true)
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
