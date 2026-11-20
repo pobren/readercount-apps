@@ -304,27 +304,15 @@ struct VisitorsChart: View {
         let peak = pts.map(\.visitors).max() ?? 0
         let peakAt = pts.firstIndex { $0.visitors == peak } ?? 0
         VStack(alignment: .leading, spacing: 10) {
-        HStack(spacing: 16) {
-            Label("Visitors and page views", systemImage: "chart.xyaxis.line").font(.rcHeadline)
-            Spacer()
-            HStack(spacing: 4) { Capsule().fill(Color.accentColor).frame(width: 16, height: 4); Text("Visitors") }.font(.rcCaption)
-            if hourly { HStack(spacing: 4) { Capsule().fill(Color.rcMagenta).frame(width: 16, height: 4); Text("Page views") }.font(.rcCaption) }
-            if !prev.isEmpty {
-                HStack(spacing: 4) {
-                    Path { p in p.move(to: CGPoint(x: 0, y: 2)); p.addLine(to: CGPoint(x: 16, y: 2)) }
-                        .stroke(Color.secondary, style: StrokeStyle(lineWidth: 2, dash: [4, 3])).frame(width: 16, height: 4)
-                    Text(hourly ? "Yesterday" : "Prior period")
-                }.font(.rcCaption)
-            }
-        }
+        Label(hourly ? "Visitors and page views" : "Visitors", systemImage: "chart.xyaxis.line").font(.rcHeadline).lineLimit(1)
         Chart(Array(pts.enumerated()), id: \.offset) { item in
             AreaMark(x: .value("Day", item.offset), y: .value("Visitors", item.element.visitors))
                 .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0)], startPoint: .top, endPoint: .bottom))
                 .interpolationMethod(curve)
             if item.offset < prev.count {
                 LineMark(x: .value("Day", item.offset), y: .value("Count", prev[item.offset]), series: .value("What", "Before"))
-                    .foregroundStyle(Color.secondary.opacity(0.7))
-                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 6]))
+                    .foregroundStyle(Color.secondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
                     .interpolationMethod(curve)
             }
             if hourly {
@@ -339,9 +327,9 @@ struct VisitorsChart: View {
                 .interpolationMethod(curve)
             // The figure above each point, as on the website; longer charts label the peak and the latest point only.
             let v = item.element.visitors
-            let labelled = v > 0 && (pts.count <= 14 || item.offset == peakAt || item.offset == pts.count - 1)
+            let labelled = v > 0 && (pts.count <= 7 || item.offset == peakAt || item.offset == pts.count - 1)
             PointMark(x: .value("Day", item.offset), y: .value("Count", v))
-                .foregroundStyle(Color.accentColor).symbolSize(pts.count <= 31 ? 40 : 0)
+                .foregroundStyle(Color.accentColor).symbolSize(labelled ? 36 : (pts.count <= 31 ? 14 : 0))
                 .annotation(position: .top, spacing: 4) {
                     if labelled { Text(Num.short(v)).font(.rcCaption2.bold()).monospacedDigit() }
                 }
@@ -376,6 +364,19 @@ struct VisitorsChart: View {
         }
         .frame(height: 220)
         .accessibilityLabel("Visitors chart")
+        // The key under the chart, so the title and key never wrap on a phone.
+        HStack(spacing: 14) {
+            HStack(spacing: 5) { Capsule().fill(Color.accentColor).frame(width: 14, height: 4); Text("Visitors") }
+            if hourly { HStack(spacing: 5) { Capsule().fill(Color.rcMagenta).frame(width: 14, height: 4); Text("Page views") } }
+            if !prev.isEmpty {
+                HStack(spacing: 5) {
+                    Path { p in p.move(to: CGPoint(x: 0, y: 2)); p.addLine(to: CGPoint(x: 14, y: 2)) }
+                        .stroke(Color.secondary, style: StrokeStyle(lineWidth: 2, dash: [4, 3])).frame(width: 14, height: 4)
+                    Text(hourly ? "Yesterday" : "Before")
+                }
+            }
+        }
+        .font(.rcCaption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
         }
     }
 
