@@ -67,6 +67,25 @@ struct Overview: Codable {
     struct Campaign: Codable, Hashable { let campaign: String; let visitors: Int }
     struct Click: Codable, Hashable { let link: String; let type: String?; let page: String?; let clicks: Int }
     struct Goal: Codable, Hashable { let goal: String; let completions: Int; let visitors: Int }
+    struct ClickRate: Codable, Hashable { let page: String; let clicks: Int; let views: Int }
+    /// Each row's visitors in the period before (by this time yesterday, for today), for the small ups and downs.
+    struct Before: Codable {
+        var pages: [String: Int]? = nil
+        var sources: [String: Int]? = nil
+        var countries: [String: Int]? = nil
+        var devices: [String: Int]? = nil
+        var browsers: [String: Int]? = nil
+        func list(_ by: String) -> [String: Int]? {
+            switch by {
+            case "page": pages
+            case "source": sources
+            case "country": countries
+            case "device": devices
+            case "browser": browsers
+            default: nil
+            }
+        }
+    }
 
     let site: String
     let period: String
@@ -86,6 +105,31 @@ struct Overview: Codable {
     let devices: [Device]
     let browsers: [Browser]
     let clicks: [Click]
+    /// Missing from older servers, and when the period before wasn't fully counted.
+    var before: Before? = nil
+    /// Link clicks on each page against its views (missing from older servers).
+    var click_rates: [ClickRate]? = nil
+}
+
+/// /app/v1/posts: Post performance, as on the website's Grow page.
+struct PostsReport: Codable {
+    struct Launch: Codable, Hashable { let page: String; let title: String?; let first: String; let views: Int; let inside: Bool }
+    struct Mover: Codable, Hashable { let page: String; let title: String?; let now: Int; let before: Int }
+    struct Movers: Codable { let days: Int; let from: String; let to: String; let up: [Mover]; let down: [Mover] }
+    struct Ridge: Codable, Hashable { let page: String; let title: String?; let total: Int; let values: [Int] }
+    struct Ridges: Codable { let bucket: String; let starts: [String]; let rows: [Ridge] }
+    struct Month: Codable, Hashable { let month: String; let views: Int; let visitors: Int; let pages: Int?; let imported: Bool? }
+
+    let site: String
+    let ready: Bool
+    var started: String? = nil
+    var today: String? = nil
+    var launch_days: Int? = nil
+    var launches: [Launch]? = nil
+    var median: Int? = nil
+    var movers: Movers? = nil
+    var ridges: Ridges? = nil
+    var months: [Month]? = nil
 }
 
 struct LiveVisitor: Codable, Hashable {

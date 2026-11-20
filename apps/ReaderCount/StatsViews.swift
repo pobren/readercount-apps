@@ -297,19 +297,19 @@ struct VisitorsChart: View {
             Label("Visitors and page views", systemImage: "chart.xyaxis.line").font(.rcHeadline)
             Spacer()
             HStack(spacing: 4) { Circle().fill(Color.accentColor).frame(width: 8, height: 8); Text("Visitors") }.font(.rcCaption)
-            HStack(spacing: 4) { Circle().fill(Color.purple.opacity(0.7)).frame(width: 8, height: 8); Text("Page views") }.font(.rcCaption)
+            HStack(spacing: 4) { Circle().fill(Color.rcMagenta).frame(width: 8, height: 8); Text("Page views") }.font(.rcCaption)
         }
         Chart(Array(points.enumerated()), id: \.offset) { item in
             LineMark(x: .value("Day", item.offset), y: .value("Count", item.element.views), series: .value("What", "Page views"))
-                .foregroundStyle(Color.purple.opacity(0.7))
-                .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                .foregroundStyle(Color.rcMagenta)
+                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.monotone)
             AreaMark(x: .value("Day", item.offset), y: .value("Visitors", item.element.visitors))
                 .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.02)], startPoint: .top, endPoint: .bottom))
                 .interpolationMethod(.monotone)
             LineMark(x: .value("Day", item.offset), y: .value("Count", item.element.visitors), series: .value("What", "Visitors"))
                 .foregroundStyle(Color.accentColor)
-                .lineStyle(StrokeStyle(lineWidth: 2.5))
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.monotone)
             if points.count <= 31 {
                 PointMark(x: .value("Day", item.offset), y: .value("Count", item.element.visitors))
@@ -357,6 +357,10 @@ struct RankList: View {
         var detail: String? = nil
         /// The value to narrow reports by, when it differs from the name shown (a country without its flag).
         var key: String? = nil
+        /// Visitors against the period before, shown small beside the number (+12 or −8).
+        var change: Int? = nil
+        /// Shown instead of the number (a click rate such as 4.2%).
+        var shown: String? = nil
         var id: String { name }
     }
     let title: String
@@ -371,6 +375,8 @@ struct RankList: View {
     var empty = "Nothing yet for these dates."
     /// Where a row opens, instead of the usual narrowed reports (a country opening its towns).
     var opens: ((Row) -> AnyView)? = nil
+    /// Keep the rows in the order given, instead of biggest first.
+    var keepOrder = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -382,8 +388,8 @@ struct RankList: View {
             if rows.isEmpty {
                 Text(empty).font(.rcCallout).foregroundStyle(.secondary)
             }
-            let sorted = rows.sorted { $0.value > $1.value }
-            let top = max(1, sorted.first?.value ?? 1)
+            let sorted = keepOrder ? rows : rows.sorted { $0.value > $1.value }
+            let top = max(1, rows.map(\.value).max() ?? 1)
             ForEach(sorted.prefix(limit)) { r in
                 if let drill, r.name != "(none)" {
                     NavigationLink {
@@ -413,7 +419,8 @@ struct RankList: View {
                 if let d = r.detail { Text(d).font(.rcCaption).foregroundStyle(.secondary) }
             }
             Spacer()
-            Text(Num.short(r.value)).monospacedDigit().bold()
+            if let c = r.change, c != 0 { ChangeText(change: c) }
+            Text(r.shown ?? Num.short(r.value)).monospacedDigit().bold()
             if chevron { Image(systemName: "chevron.right").font(.rcCaption).foregroundStyle(.tertiary) }
         }
         .padding(.vertical, 4).padding(.horizontal, 8)
@@ -647,6 +654,7 @@ struct DevicesDonut: View {
                                 Circle().fill(Self.colours[d.device.lowercased()] ?? .gray).frame(width: 10, height: 10)
                                 Text(d.device.capitalized)
                                 Spacer()
+                                if let c = o.change("device", d.device, d.visitors), c != 0 { ChangeText(change: c) }
                                 Text("\(Int((100 * Double(d.visitors) / Double(total)).rounded()))%").bold().monospacedDigit()
                             }
                         }
@@ -876,9 +884,9 @@ struct TodayContent: View {
                 }
                 TilesView(o: o, columns: columns)
                 VisitorsChart(o: o).card()
-                let pages = RankList(title: "Top pages", icon: "doc.richtext", rows: o.top_pages.map { .init(name: $0.page, value: $0.visitors) }, drill: "page")
-                let sources = RankList(title: "Sources", icon: "arrow.down.right.circle", rows: o.sources.map { .init(name: $0.source, value: $0.visitors) }, drill: "source")
-                let countries = RankList(title: "Countries", icon: "globe.europe.africa", rows: o.countries.map { .init(name: "\(Num.flag($0.country)) \($0.country)", value: $0.visitors, key: $0.country) }, drill: "country")
+                let pages = RankList(title: "Top pages", icon: "doc.richtext", rows: o.top_pages.map { .init(name: $0.page, value: $0.visitors, change: o.change("page", $0.page, $0.visitors)) }, drill: "page")
+                let sources = RankList(title: "Sources", icon: "arrow.down.right.circle", rows: o.sources.map { .init(name: $0.source, value: $0.visitors, change: o.change("source", $0.source, $0.visitors)) }, drill: "source")
+                let countries = RankList(title: "Countries", icon: "globe.europe.africa", rows: o.countries.map { .init(name: "\(Num.flag($0.country)) \($0.country)", value: $0.visitors, key: $0.country, change: o.change("country", $0.country, $0.visitors)) }, drill: "country")
                 // Each link once, with its clicks from every page added up.
                 let byLink = Dictionary(grouping: o.clicks, by: \.link).map { RankList.Row(name: $0.key, value: $0.value.reduce(0) { $0 + $1.clicks }) }
                 let clicks = RankList(title: "Clicks", icon: "cursorarrow.click.2", rows: byLink, empty: "No link clicks for these dates.")
@@ -1655,7 +1663,8 @@ struct BreakdownContent: View {
                 if data.rows.count > 1 {
                     ShareChart(title: clicks ? "Share of clicks" : "Share of visitors", rows: data.rows.map { (label($0.name), $0.count) })
                 }
-                RankList(title: title, icon: icon, rows: data.rows.map { .init(name: label($0.name), value: $0.count, key: $0.name) }, limit: 50, drill: clicks ? nil : by, filters: filters,
+                let o = filters.isEmpty && !clicks ? model.overview : nil
+                RankList(title: title, icon: icon, rows: data.rows.map { .init(name: label($0.name), value: $0.count, key: $0.name, change: o?.change(by, $0.name, $0.count)) }, limit: 50, drill: clicks ? nil : by, filters: filters,
                          opens: by == "country" && countryOpensTowns ? { (r: RankList.Row) -> AnyView in AnyView(CountryTowns(code: r.key ?? r.name)) } : nil)
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 200)
@@ -1663,6 +1672,7 @@ struct BreakdownContent: View {
         }
         .task(id: model.current + model.datesKey + by + filters.description) {
             data = await model.breakdown(by, clicks: clicks, filters: filters)
+            if model.overview == nil && filters.isEmpty && !clicks { await model.loadOverview() }
             if by == "town" && !clicks {
                 var map: [String: String] = [:]
                 for p in await model.places() where map[p.town] == nil { map[p.town] = p.country }
@@ -1737,10 +1747,11 @@ struct SearchesContent: View {
 
 /// The More list: each breakdown the website has, opened on its own screen.
 enum MoreItem: String, CaseIterable, Identifiable {
-    case alerts, housekeeping, trails, google, sources, clicks, countries, devices, browsers, campaigns
+    case posts, alerts, housekeeping, trails, google, sources, clicks, countries, devices, browsers, campaigns
     var id: String { rawValue }
     var title: String {
         switch self {
+        case .posts: "Post performance"
         case .alerts: "Alerts"
         case .housekeeping: "Housekeeping"
         case .trails: "Visitor trails"
@@ -1755,6 +1766,7 @@ enum MoreItem: String, CaseIterable, Identifiable {
     }
     var icon: String {
         switch self {
+        case .posts: "chart.line.uptrend.xyaxis"
         case .alerts: "bell.badge"
         case .housekeeping: "checklist"
         case .trails: "point.topleft.down.to.point.bottomright.curvepath"
@@ -1770,12 +1782,13 @@ enum MoreItem: String, CaseIterable, Identifiable {
 
     @ViewBuilder var content: some View {
         switch self {
+        case .posts: PostsContent()
         case .alerts: AlertsContent()
         case .housekeeping: HousekeepingContent()
         case .trails: TrailsContent()
         case .google: SearchesContent()
         case .sources: BreakdownContent(title: title, icon: icon, by: "source")
-        case .clicks: BreakdownContent(title: title, icon: icon, by: "link", clicks: true)
+        case .clicks: ClicksContent()
         case .countries: PlacesContent()
         case .devices: BreakdownContent(title: title, icon: icon, by: "device")
         case .browsers: BreakdownContent(title: title, icon: icon, by: "browser")

@@ -261,6 +261,13 @@ final class Model {
         do { overview = try await API.shared.get(Overview.self, "app/v1/overview", ["site": current].merging(dates) { _, new in new }) } catch { handle(error) }
     }
 
+    /// Post performance: each post's first 30 days, risers and fallers, top posts over time and month by month.
+    func posts() async -> PostsReport? {
+        if Demo.on { return Demo.posts }
+        guard !current.isEmpty else { return nil }
+        do { return try await API.shared.get(PostsReport.self, "app/v1/posts", ["site": current]) } catch { handle(error); return nil }
+    }
+
     /// Towns with their region and country, for the map.
     func places() async -> [Place] {
         if Demo.on {

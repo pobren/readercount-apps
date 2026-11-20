@@ -20,6 +20,36 @@ enum Demo {
     static var overview: Overview? { decode(Overview.self, overviewJSON) }
     static var live: Live? { decode(Live.self, liveJSON) }
     static var health: Health? { decode(Health.self, healthJSON) }
+    static var posts: PostsReport? { decode(PostsReport.self, postsJSON) }
+
+    static let postsJSON = #"""
+{
+ "site": "myblog.com", "ready": true, "started": "2026-05-02", "today": "2026-11-13", "launch_days": 30, "median": 620,
+ "launches": [
+  {"page": "/fastmail-vs-gmail/", "title": "Fastmail vs Gmail", "first": "2026-11-02", "views": 540, "inside": true},
+  {"page": "/how-to-set-up-dmarc/", "title": "How to set up DMARC", "first": "2026-10-12", "views": 1210, "inside": false},
+  {"page": "/proton-mail-review/", "title": "Proton Mail review", "first": "2026-09-20", "views": 880, "inside": false},
+  {"page": "/newsletter/", "title": "Newsletter", "first": "2026-08-30", "views": 310, "inside": false},
+  {"page": "/best-email-hosting-uk/", "title": "Best email hosting in the UK", "first": "2026-07-14", "views": 620, "inside": false}
+ ],
+ "movers": {"days": 28, "from": "2026-10-16", "to": "2026-11-12",
+  "up": [{"page": "/how-to-set-up-dmarc/", "title": "How to set up DMARC", "now": 1420, "before": 610}, {"page": "/fastmail-vs-gmail/", "title": "Fastmail vs Gmail", "now": 540, "before": 0}],
+  "down": [{"page": "/newsletter/", "title": "Newsletter", "now": 120, "before": 260}]},
+ "ridges": {"bucket": "week", "starts": ["2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02", "2026-11-09"],
+  "rows": [
+   {"page": "/best-email-hosting-uk/", "title": "Best email hosting in the UK", "total": 4210, "values": [610, 650, 700, 720, 760, 770]},
+   {"page": "/proton-mail-review/", "title": "Proton Mail review", "total": 2890, "values": [420, 470, 480, 500, 510, 510]},
+   {"page": "/how-to-set-up-dmarc/", "title": "How to set up DMARC", "total": 2160, "values": [0, 180, 360, 470, 560, 590]},
+   {"page": "/fastmail-vs-gmail/", "title": "Fastmail vs Gmail", "total": 540, "values": [0, 0, 0, 0, 230, 310]}
+  ]},
+ "months": [
+  {"month": "2026-11", "views": 7420, "visitors": 5190, "pages": 41},
+  {"month": "2026-10", "views": 16880, "visitors": 11720, "pages": 52},
+  {"month": "2026-09", "views": 14100, "visitors": 9860, "pages": 47},
+  {"month": "2026-08", "views": 11930, "visitors": 8410, "pages": 39}
+ ]
+}
+"""#
 
     static let meJSON = #"""
 {
@@ -234,6 +264,19 @@ enum Demo {
    "page": "/proton-mail-review/",
    "clicks": 96
   }
+ ],
+ "before": {
+  "pages": {"/best-email-hosting-uk/": 702, "/proton-mail-review/": 455, "/how-to-set-up-dmarc/": 360, "/fastmail-vs-gmail/": 166, "/": 150, "/newsletter/": 70, "/about/": 48},
+  "sources": {"Google": 1402, "Direct": 540, "Reddit": 160, "Bing": 101, "Bluesky": 31, "DuckDuckGo": 40, "Newsletter": 22},
+  "countries": {"GB": 1180, "US": 610, "IE": 190, "DE": 120, "CA": 80, "AU": 70},
+  "devices": {"mobile": 1380, "desktop": 1150, "tablet": 74},
+  "browsers": {"Chrome": 1150, "Safari": 1010, "Firefox": 214}
+ },
+ "click_rates": [
+  {"page": "/proton-mail-review/", "clicks": 96, "views": 812},
+  {"page": "/best-email-hosting-uk/", "clicks": 74, "views": 1104},
+  {"page": "/fastmail-vs-gmail/", "clicks": 21, "views": 260},
+  {"page": "/how-to-set-up-dmarc/", "clicks": 9, "views": 498}
  ]
 }
 """#
