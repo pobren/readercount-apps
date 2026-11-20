@@ -363,9 +363,13 @@ struct VisitorsChart: View {
             }
         }
         .chartXSelection(value: $selected)
+        // Edge to edge, as on the website: the first point on the left edge, the latest on the right.
+        .chartXScale(domain: 0...max(1, pts.count - 1))
+        .chartYScale(domain: 0...yTop(max(peak, prev.max() ?? 0, hourly ? (pts.map(\.views).max() ?? 0) : 0)))
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 5)) { v in
-                AxisValueLabel {
+            AxisMarks(values: xTicks(pts.count)) { v in
+                AxisGridLine()
+                AxisValueLabel(anchor: v.index == 0 ? .topLeading : .top) {
                     if let i = v.as(Int.self), i >= 0, i < pts.count { Text(label(pts[i])) }
                 }
             }
@@ -373,6 +377,22 @@ struct VisitorsChart: View {
         .frame(height: 220)
         .accessibilityLabel("Visitors chart")
         }
+    }
+
+    /// A round number just above the highest value, so the curves have room for the figures above them.
+    private func yTop(_ m: Int) -> Int {
+        let raw = Double(max(1, m)) * 1.15
+        let p = pow(10, floor(log10(raw)))
+        let step = [1.0, 2, 2.5, 5, 10].map { $0 * p }.first { $0 >= raw / 4 } ?? 10 * p
+        return Int(step * ceil(raw / step))
+    }
+
+    /// Where the dates or hours go along the bottom: every few hours on Today, about six dates otherwise.
+    private func xTicks(_ n: Int) -> [Int] {
+        guard n > 1 else { return [0] }
+        if hourly { return Array(stride(from: 0, to: n, by: n <= 8 ? 1 : n <= 16 ? 3 : 4)) }
+        if n <= 7 { return Array(0..<n) }
+        return Array(Set((0...5).map { Int((Double($0 * (n - 1)) / 5).rounded()) })).sorted()
     }
 
     private func label(_ d: Overview.Day) -> String {
