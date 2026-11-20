@@ -84,43 +84,59 @@ enum Demo {
  },
  "previous_period": {
   "visitors": 2604,
-  "views": 3810
+  "views": 3810,
+  "avg_seconds": 139,
+  "bounce_percent": 44
  },
  "per_day": [
   {
    "day": "2026-11-07",
    "views": 572,
-   "visitors": 395
+   "visitors": 395,
+   "secs": 132,
+   "bounce": 44
   },
   {
    "day": "2026-11-08",
    "views": 638,
-   "visitors": 440
+   "visitors": 440,
+   "secs": 151,
+   "bounce": 40
   },
   {
    "day": "2026-11-09",
    "views": 645,
-   "visitors": 445
+   "visitors": 445,
+   "secs": 158,
+   "bounce": 39
   },
   {
    "day": "2026-11-10",
    "views": 651,
-   "visitors": 449
+   "visitors": 449,
+   "secs": 149,
+   "bounce": 41
   },
   {
    "day": "2026-11-11",
    "views": 598,
-   "visitors": 413
+   "visitors": 413,
+   "secs": 144,
+   "bounce": 42
   },
   {
    "day": "2026-11-12",
    "views": 508,
-   "visitors": 351
+   "visitors": 351,
+   "secs": 139,
+   "bounce": 43
   },
   {
    "day": "2026-11-13",
    "views": 472,
-   "visitors": 326
+   "visitors": 326,
+   "secs": 153,
+   "bounce": 38
   }
  ],
  "top_pages": [
