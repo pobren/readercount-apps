@@ -213,8 +213,24 @@ final class Model {
             Tokens.clear()
             signedIn = false
         }
+        // Opening the app (or coming back to it) often fails the first request or two while iOS brings the
+        // connection back, so a missing connection only shows once it has lasted a little while.
+        if let a = e as? APIError, a.offline {
+            let first = offlineSince ?? Date()
+            offlineSince = first
+            if Date().timeIntervalSince(first) < 10 {
+                if !retryQueued {
+                    retryQueued = true
+                    Task { try? await Task.sleep(for: .seconds(3)); retryQueued = false; await refresh() }
+                }
+                return
+            }
+        }
         error = e.localizedDescription
     }
+    /// When requests started failing for want of a connection, and whether a quiet retry is on its way.
+    private var offlineSince: Date?
+    private var retryQueued = false
 
     // MARK: Loading
 
@@ -230,6 +246,7 @@ final class Model {
             sum.save()
             WidgetCenter.shared.reloadAllTimelines()
             error = nil
+            offlineSince = nil
             Task { await loadFavicons() }
             if !current.isEmpty { await loadOverview() }
             bumpReload()
@@ -242,6 +259,13 @@ final class Model {
         if Demo.on { overview = Demo.overview; return }
         guard !current.isEmpty else { return }
         do { overview = try await API.shared.get(Overview.self, "app/v1/overview", ["site": current].merging(dates) { _, new in new }) } catch { handle(error) }
+    }
+
+    /// Post performance: each post's first 30 days, risers and fallers, top posts over time and month by month.
+    func posts() async -> PostsReport? {
+        if Demo.on { return Demo.posts }
+        guard !current.isEmpty else { return nil }
+        do { return try await API.shared.get(PostsReport.self, "app/v1/posts", ["site": current]) } catch { handle(error); return nil }
     }
 
     /// Towns with their region and country, for the map.
