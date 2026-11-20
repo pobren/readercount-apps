@@ -96,6 +96,9 @@ struct Overview: Codable {
     let per_day: [Day]
     /// Today only: one point per hour so far.
     var per_hour: [Day]? = nil
+    /// The period before, point by point (yesterday hour by hour, for today), for the dashed line. Missing from older servers.
+    var previous_per_day: [Day]? = nil
+    var previous_per_hour: [Day]? = nil
     /// Goals and sign-ups (missing from older servers).
     var goals: [Goal]? = nil
     let top_pages: [Page]

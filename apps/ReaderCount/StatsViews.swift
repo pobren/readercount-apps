@@ -288,33 +288,63 @@ struct TilesView: View {
 struct VisitorsChart: View {
     let o: Overview
     @State private var selected: Int?
-    /// Today draws one point per hour; other dates one per day.
-    private var points: [Overview.Day] { (o.per_hour?.count ?? 0) > 1 ? o.per_hour! : o.per_day }
+    /// Today draws one point per hour as soft curves (as on the website); other dates one point per day.
+    private var hourly: Bool { (o.per_hour?.count ?? 0) > 1 }
+    private var points: [Overview.Day] { hourly ? o.per_hour! : o.per_day }
+    /// The period before, point by point: yesterday for today, the prior period otherwise. Empty when there's none.
+    private var before: [Int] {
+        let p = (hourly ? o.previous_per_hour : o.previous_per_day) ?? []
+        guard p.count == points.count, p.contains(where: { $0.visitors > 0 }) else { return [] }
+        return p.map(\.visitors)
+    }
+    private var curve: InterpolationMethod { hourly ? .monotone : .linear }
 
     var body: some View {
+        let pts = points, prev = before
+        let peak = pts.map(\.visitors).max() ?? 0
+        let peakAt = pts.firstIndex { $0.visitors == peak } ?? 0
         VStack(alignment: .leading, spacing: 10) {
         HStack(spacing: 16) {
             Label("Visitors and page views", systemImage: "chart.xyaxis.line").font(.rcHeadline)
             Spacer()
-            HStack(spacing: 4) { Circle().fill(Color.accentColor).frame(width: 8, height: 8); Text("Visitors") }.font(.rcCaption)
-            HStack(spacing: 4) { Circle().fill(Color.rcMagenta).frame(width: 8, height: 8); Text("Page views") }.font(.rcCaption)
+            HStack(spacing: 4) { Capsule().fill(Color.accentColor).frame(width: 16, height: 4); Text("Visitors") }.font(.rcCaption)
+            if hourly { HStack(spacing: 4) { Capsule().fill(Color.rcMagenta).frame(width: 16, height: 4); Text("Page views") }.font(.rcCaption) }
+            if !prev.isEmpty {
+                HStack(spacing: 4) {
+                    Path { p in p.move(to: CGPoint(x: 0, y: 2)); p.addLine(to: CGPoint(x: 16, y: 2)) }
+                        .stroke(Color.secondary, style: StrokeStyle(lineWidth: 2, dash: [4, 3])).frame(width: 16, height: 4)
+                    Text(hourly ? "Yesterday" : "Prior period")
+                }.font(.rcCaption)
+            }
         }
-        Chart(Array(points.enumerated()), id: \.offset) { item in
-            LineMark(x: .value("Day", item.offset), y: .value("Count", item.element.views), series: .value("What", "Page views"))
-                .foregroundStyle(Color.rcMagenta)
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                .interpolationMethod(.monotone)
+        Chart(Array(pts.enumerated()), id: \.offset) { item in
             AreaMark(x: .value("Day", item.offset), y: .value("Visitors", item.element.visitors))
-                .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.35), Color.accentColor.opacity(0.02)], startPoint: .top, endPoint: .bottom))
-                .interpolationMethod(.monotone)
+                .foregroundStyle(LinearGradient(colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0)], startPoint: .top, endPoint: .bottom))
+                .interpolationMethod(curve)
+            if item.offset < prev.count {
+                LineMark(x: .value("Day", item.offset), y: .value("Count", prev[item.offset]), series: .value("What", "Before"))
+                    .foregroundStyle(Color.secondary.opacity(0.7))
+                    .lineStyle(StrokeStyle(lineWidth: 2, dash: [6, 6]))
+                    .interpolationMethod(curve)
+            }
+            if hourly {
+                LineMark(x: .value("Day", item.offset), y: .value("Count", item.element.views), series: .value("What", "Page views"))
+                    .foregroundStyle(Color.rcMagenta)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.monotone)
+            }
             LineMark(x: .value("Day", item.offset), y: .value("Count", item.element.visitors), series: .value("What", "Visitors"))
                 .foregroundStyle(Color.accentColor)
-                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                .interpolationMethod(.monotone)
-            if points.count <= 31 {
-                PointMark(x: .value("Day", item.offset), y: .value("Count", item.element.visitors))
-                    .foregroundStyle(Color.accentColor).symbolSize(18)
-            }
+                .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+                .interpolationMethod(curve)
+            // The figure above each point, as on the website; longer charts label the peak and the latest point only.
+            let v = item.element.visitors
+            let labelled = v > 0 && (pts.count <= 14 || item.offset == peakAt || item.offset == pts.count - 1)
+            PointMark(x: .value("Day", item.offset), y: .value("Count", v))
+                .foregroundStyle(Color.accentColor).symbolSize(pts.count <= 31 ? 40 : 0)
+                .annotation(position: .top, spacing: 4) {
+                    if labelled { Text(Num.short(v)).font(.rcCaption2.bold()).monospacedDigit() }
+                }
             if let selected, selected == item.offset {
                 RuleMark(x: .value("Day", selected))
                     .foregroundStyle(.secondary.opacity(0.5))
@@ -323,6 +353,9 @@ struct VisitorsChart: View {
                             Text(label(item.element)).font(.rcCaption.bold())
                             Text("\(item.element.visitors.formatted()) visitors").font(.rcCaption)
                             Text("\(item.element.views.formatted()) page views").font(.rcCaption).foregroundStyle(.secondary)
+                            if item.offset < prev.count {
+                                Text("\(hourly ? "Same hour yesterday" : "Prior period"): \(prev[item.offset].formatted())").font(.rcCaption).foregroundStyle(.secondary)
+                            }
                         }
                         .padding(8)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -333,11 +366,11 @@ struct VisitorsChart: View {
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 5)) { v in
                 AxisValueLabel {
-                    if let i = v.as(Int.self), i >= 0, i < points.count { Text(label(points[i])) }
+                    if let i = v.as(Int.self), i >= 0, i < pts.count { Text(label(pts[i])) }
                 }
             }
         }
-        .frame(height: 200)
+        .frame(height: 220)
         .accessibilityLabel("Visitors chart")
         }
     }
