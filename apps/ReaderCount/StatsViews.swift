@@ -267,6 +267,8 @@ struct TilesView: View {
 
     var body: some View {
         let points = (o.per_hour?.count ?? 0) > 1 ? o.per_hour! : o.per_day
+        // Time on page and bounce rate only mean something where someone visited, so quiet hours and days are left out of their lines.
+        let read = points.filter { $0.views > 0 }
         // Older servers don't send a clicks total: add up the clicked links instead.
         let clicks = o.totals.clicks ?? o.clicks.reduce(0) { $0 + $1.clicks }
         let clicksTile = Tile(title: "Clicks", value: Num.short(clicks), change: o.previous_period.clicks.flatMap { percentChange(clicks, $0) }, icon: "cursorarrow.click.2", tint: .pink, trend: points.compactMap(\.clicks))
@@ -276,8 +278,8 @@ struct TilesView: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: count), spacing: 12) {
                 Tile(title: "Visitors", value: Num.short(o.totals.visitors), change: percentChange(o.totals.visitors, o.previous_period.visitors), icon: "person.2.fill", tint: .blue, trend: points.map(\.visitors))
                 Tile(title: "Page views", value: Num.short(o.totals.views), change: percentChange(o.totals.views, o.previous_period.views), icon: "doc.text.fill", tint: .purple, trend: points.map(\.views))
-                Tile(title: "Time on page", value: Num.time(o.totals.avg_seconds), icon: "clock.fill", tint: .teal)
-                Tile(title: "Bounce rate", value: "\(o.totals.bounce_percent ?? 0)%", icon: "arrow.uturn.left", tint: .orange, lowerIsBetter: true)
+                Tile(title: "Time on page", value: Num.time(o.totals.avg_seconds), change: o.previous_period.avg_seconds.flatMap { percentChange(o.totals.avg_seconds ?? 0, $0) }, icon: "clock.fill", tint: .teal, trend: read.compactMap(\.secs))
+                Tile(title: "Bounce rate", value: "\(o.totals.bounce_percent ?? 0)%", change: o.previous_period.bounce_percent.flatMap { percentChange(o.totals.bounce_percent ?? 0, $0) }, icon: "arrow.uturn.left", tint: .orange, trend: read.compactMap(\.bounce), lowerIsBetter: true)
                 if count == 5 { clicksTile }
             }
             if count != 5 { clicksTile }
