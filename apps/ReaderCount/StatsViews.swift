@@ -1457,7 +1457,7 @@ struct HealthContent: View {
                         if fix > 0 { Pill(text: "\(fix) to fix now", icon: "exclamationmark.octagon.fill", tint: .red) }
                         if look > 0 { Pill(text: "\(look) to look at", icon: "exclamationmark.triangle.fill", tint: .orange) }
                     }
-                    if !h.what_to_fix.isEmpty { Pill(text: "\(h.what_to_fix.count) ways to improve", icon: "lightbulb.fill", tint: .blue) }
+                    if !h.what_to_fix.isEmpty { Pill(text: h.what_to_fix.count == 1 ? "1 way to improve" : "\(h.what_to_fix.count) ways to improve", icon: "lightbulb.fill", tint: .blue) }
                     if !h.marked.isEmpty { Pill(text: "\(h.marked.count) done", icon: "checkmark.circle.fill", tint: .gray) }
                 }
                 }
