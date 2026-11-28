@@ -1573,7 +1573,9 @@ struct FixKind {
     init(_ kind: String) {
         let t: (String, String, Color) = switch kind {
         case "page-two": ("Nearly on page one of Google", "arrow.up.forward.circle.fill", .blue)
-        case "slipping", "losing": ("Slipping in Google", "chart.line.downtrend.xyaxis", .orange)
+        case "slipping": ("Slipping in Google", "chart.line.downtrend.xyaxis", .orange)
+        // Fewer visitors from any source, so it doesn't blame Google (the website calls it the same).
+        case "losing": ("Losing visitors", "person.fill.badge.minus", .orange)
         case "few-clicks": ("Seen in Google, rarely clicked", "cursorarrow.click.badge.clock", .purple)
         case "bounce": ("Readers leave quickly", "arrow.uturn.left.circle.fill", .pink)
         default: ("Worth a look", "lightbulb.fill", .teal)
