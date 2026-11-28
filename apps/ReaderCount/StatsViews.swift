@@ -338,7 +338,8 @@ struct VisitorsChart: View {
             if let selected, selected == item.offset {
                 RuleMark(x: .value("Day", selected))
                     .foregroundStyle(.secondary.opacity(0.5))
-                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                    // Kept inside the chart, so it can't cover the card above.
+                    .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(label(item.element)).font(.rcCaption.bold())
                             Text("\(item.element.visitors.formatted()) visitors").font(.rcCaption)
@@ -347,8 +348,14 @@ struct VisitorsChart: View {
                                 Text("\(hourly ? "Same hour yesterday" : "Prior period"): \(prev[item.offset].formatted())").font(.rcCaption).foregroundStyle(.secondary)
                             }
                         }
+                        // Its own colours: a material here draws as a black box, and the text took the rule's grey.
+                        .foregroundStyle(Color.primary)
                         .padding(8)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                        .background {
+                            RoundedRectangle(cornerRadius: 8).fill(Color.rcTooltip)
+                                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
+                        }
                     }
             }
         }
@@ -1881,5 +1888,16 @@ struct AlertsSettings: View {
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
             }
         }
+    }
+}
+
+extension Color {
+    /// A solid card colour for chart tooltips, light or dark to match the screen.
+    static var rcTooltip: Color {
+        #if os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color(uiColor: .secondarySystemGroupedBackground)
+        #endif
     }
 }
